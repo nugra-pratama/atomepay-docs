@@ -45,6 +45,10 @@
     code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; font-size: 0.9em; }
     pre { background: #1e1e1e; color: #f4f4f2; border-radius: 10px; padding: 14px 18px; overflow-x: auto; font-size: 12.5px; line-height: 1.55; }
     pre code { background: transparent; padding: 0; color: inherit; }
+    .code-block { margin: 22px 0 28px; }
+    .code-block .code-cap { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; font-weight: 600; color: var(--accent); margin-bottom: 4px; }
+    .code-block .code-note { color: var(--muted); font-size: 13px; line-height: 1.55; margin-bottom: 8px; }
+    .code-block pre { margin: 0; border: 1px solid #2e2e2e; }
     .callout { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 8px; padding: 12px 16px; margin: 18px 0; font-size: 14px; }
     .callout.warn { border-left-color: #f59f00; }
     .callout.danger { border-left-color: #e03131; }
@@ -112,6 +116,7 @@
         <a href="#partner-doku">Doku</a>
         <a href="#partner-artajasa">Artajasa</a>
         <a href="#partner-rintis">Rintis</a>
+        <a href="#partner-code">Key code</a>
       </div>
       <div class="group">
         <div class="group-label">Reference</div>
@@ -730,6 +735,167 @@ sequenceDiagram
   </div>
       <p class="diagram-caption">Rintis — Keycloak (JWK) auth; PAYMENT command triggers wallet credit via TopupWalletWorkflow and returns status codes; text templates per locale.</p>
 
+      <h3 id="partner-code">Key code — what makes the integrations work</h3>
+      <p>The snippets below are the parts of the platform that are easiest to get wrong or misunderstand. Paths are relative to each service repo at <code>/opt/atomepay/</code>.</p>
+      <div class="code-block">
+        <div class="code-cap">1 · Idempotent wallet credit — <code>account-service</code> <code>TopupWalletServiceImpl.kt</code></div>
+        <div class="code-note">The single place every top-up (Artajasa/Rintis) money-in lands. Idempotency key = <code>partnerTransactionId</code>; all limits are checked before the balance mutation; tx row is written before the balance so a crash never credits twice.</div>
+        <pre><code>override fun creditTopupWallet(
+    accountNumber: String,
+    amount: BigDecimal,
+    partnerTransactionId: String,
+    referenceNumber: String
+): UUID {
+    // Idempotency guard — a partnerTransactionId is credited exactly once.
+    // Re-delivered partner notifications become a no-op returning the same wallet.
+    if (walletTransactionRepository.existsByPartnerTransactionId(partnerTransactionId)) {
+        val processed = walletTransactionRepository.findByPartnerTransactionId(partnerTransactionId)
+            .orElseThrow { IllegalStateException("tx exists but not found") }
+        return processed.wallet?.id ?: throw IllegalStateException("no wallet id")
+    }
+
+    val wallet = walletRepository.findByAccountNumber(accountNumber)
+        .orElseThrow { ErrorCode.WALLET_NOT_FOUND_EXCEPTION.toException() }
+
+    val balanceBefore = wallet.balance
+    val balanceAfter  = balanceBefore + amount
+
+    // Wallet balance + frequency limits are enforced before mutating anything
+    val limit = walletLimitService.getWalletBalanceLimits(wallet)
+    if (balanceAfter &lt; limit.minLimit || balanceAfter &gt; limit.maxLimit)
+        throw ErrorCode.TRANSACTION_EXCEED_LIMIT_AMOUNT.toException()
+
+    walletLimitService.validateHourlyTopupCount(wallet)
+    walletLimitService.validateDailyCountLimit(wallet)
+    walletLimitService.validateDailyAmountLimit(wallet, amount)
+    walletLimitService.validateMonthlyCreditLimit(wallet, amount)
+
+    val tx = WalletTransaction(
+        wallet = wallet,
+        accountNumber = wallet.accountNumber,
+        partnerTransactionId = partnerTransactionId,
+        referenceNumber = referenceNumber,
+        type = WalletTransactionType.CREDIT,
+        currency = wallet.currency,
+        amount = amount,
+        balanceBefore = balanceBefore,
+        balanceAfter  = balanceAfter,
+    )
+    walletTransactionRepository.save(tx)   // tx row first (audit trail)
+    wallet.balance = balanceAfter
+    walletRepository.save(wallet)          // then balance
+    return wallet.id
+}</code></pre>
+      </div>
+      <div class="code-block">
+        <div class="code-cap">2 · Artajasa inbound auth + ACK — <code>topup-service</code> <code>ArtajasaService.kt</code></div>
+        <div class="code-note">Artajasa uses a static shared-secret match (username + signature hash) instead of HMAC/HTTPS-mTLS. The response body carries a partner status-code ACK (<code>SUCCESS / ALREADY_PAID / ILLEGAL_SIGNATURE / …</code>) — the workflow runs synchronously within a 30s client timeout.</div>
+        <pre><code>// Inbound partner callbacks are authenticated by matching the
+// configured username + signature-hash (shared secret), not an OAuth flow.
+private fun isSignatureValid(request: ArtajasaNotificationRequest): Boolean {
+    return request.username == artajasaConfig.username
+        &amp;&amp; request.signature == artajasaConfig.signatureHash
+}
+
+override fun handlePaymentNotification(request: ArtajasaNotificationRequest): ArtajasaNotificationResponse {
+    if (isSignatureValid(request).not()) {
+        // Partner expects an ACK with a status code in the response body
+        return createResponse("", request.signature,
+            TransactionStatusCode.ILLEGAL_SIGNATURE_TRANSACTION)
+    }
+
+    val booking = artajasaTransactionBookingRepository.findById(request.bookingId).orElse(null)
+    if (booking == null)
+        return createResponse(request.bookingId, request.signature,
+            TransactionStatusCode.NO_TRANSACTION_FOUND)
+    // ... amount/status validation returns ALREADY_PAID / FAILED / INVALID_AMOUNT ...
+
+    // Valid → persist order then hand off to the Temporal workflow
+    val order = createTransactionOrder(request, booking)          // status RECEIVED
+    return startTopupWorkflow(request, booking, order)            // sync ACK w/ result code
+}</code></pre>
+      </div>
+      <div class="code-block">
+        <div class="code-cap">3 · Doku outbound HMAC-SHA512 — <code>transfer-service</code> <code>DokuTransferSignatureServiceImpl.kt</code></div>
+        <div class="code-note">Doku signatures are <b>HMAC-SHA512(clientSecret)</b> over a canonical string <code>METHOD:URL:TOKEN:SHA256(minifiedBody):ISO_TIMESTAMP</code>. The minified body must be the exact canonical JSON (Jackson <code>readTree</code>) or the hash won't match on Doku's side.</div>
+        <pre><code>// Outbound Doku request signature: HMAC-SHA512 over
+// "HTTP_METHOD:endpointUrl:accessToken:sha256(minifiedBody):timestamp"
+// using the *client secret* as the HMAC key.
+override fun &lt;T&gt; createFromPayload(
+    httpMethod: String,
+    endpointUrl: String,
+    accessToken: String,
+    payload: T,
+): ByteArray {
+    val requestBody    = objectMapper.writeValueAsString(payload)
+    val minifiedBody   = objectMapper.readTree(requestBody).toString()  // canonical JSON
+    val hashedBodyHex  = messageDigest.digest(minifiedBody.toByteArray(Charsets.UTF_8))
+        .joinToString("") { "%02x".format(it) }.lowercase()
+
+    return "${httpMethod.uppercase()}:$endpointUrl:$accessToken:$hashedBodyHex:$timestamp"
+        .toByteArray(Charsets.UTF_8)
+}
+
+override fun createSignature(byteArrayToSign: ByteArray): String {
+    val mac = Mac.getInstance("HmacSHA512")
+    val key = SecretKeySpec(properties.clientSecret.toByteArray(Charsets.UTF_8), "HmacSHA512")
+    mac.init(key)
+    return Base64.getEncoder().encodeToString(mac.doFinal(byteArrayToSign))
+}</code></pre>
+      </div>
+      <div class="code-block">
+        <div class="code-cap">4 · Doku webhook verification — <code>transfer-service</code> <code>DokuNotificationService.kt</code></div>
+        <div class="code-note">Inbound Doku webhooks (unpaid / refund) are verified with a symmetric <b>AES(encryptionKey)</b> over <code>agentKey + requestId</code> — a different scheme from the outbound HMAC. Both live in <code>DokuPayoutServiceProperties</code>.</div>
+        <pre><code>// Inbound Doku webhook (unpaid / refund): re-compute AES(agentKey + requestId)
+// with the configured encryption key and compare.
+override fun verifySignature(agentKey: String, requestId: String, signature: String): Boolean {
+    if (agentKey != properties.agentKey)
+        throw IllegalStateException("Invalid agentKey: $agentKey")
+
+    val localSignature = encrypt(agentKey + requestId, properties.encryptionKey)
+    if (localSignature != signature)
+        throw IllegalStateException("Invalid signature not match: $localSignature != $signature")
+    return true
+}
+
+private fun encrypt(plainString: String, encryptionKey: String): String {
+    val key     = SecretKeySpec(encryptionKey.toByteArray(), "AES")
+    val cipher  = Cipher.getInstance("AES")
+    cipher.init(Cipher.ENCRYPT_MODE, key)
+    return Base64.getEncoder().encodeToString(cipher.doFinal(plainString.toByteArray()))
+}</code></pre>
+      </div>
+      <div class="code-block">
+        <div class="code-cap">5 · Cross-service child workflow + signal — <code>topup-service</code> / <code>account-service</code></div>
+        <div class="code-note">Rintis/Artajasa notification workflows credit the wallet by starting a <b>child workflow on the account-service task queue</b> (workflow-level reliability across services). Booking record-booking uses {@literal @}SignalMethod <code>confirmBooking()</code> so a lasting workflow can be settled when the payment notification arrives later.</div>
+        <pre><code>// Top-up notification (Rintis shown; Artajasa is identical) → wallet credit
+// happens on ANOTHER service via a child workflow on its task queue.
+private fun startCreditTopupWalletWorkflow(order: RintisTransactionOrder) {
+    val stub = Workflow.newChildWorkflowStub(
+        TopupWalletWorkflow::class.java,
+        ChildWorkflowOptions.newBuilder()
+            .setWorkflowId("credit-wallet-${Workflow.getInfo().workflowId}")
+            .setTaskQueue(TemporalConfig.ACCOUNT_SERVICE_TASK_QUEUE)  // account-service worker
+            .setWorkflowRunTimeout(Duration.ofSeconds(5))
+            .build()
+    )
+    stub.creditTopupWallet(
+        order.accountNumber, order.amount,
+        order.partnerTransactionId, order.referenceNumber
+    )
+}
+
+// Booking lifecycle uses the signal pattern so the inquiry flow can be
+// completed later by the payment-notification flow (same workflowId).
+@WorkflowInterface
+interface ArtajasaRecordBookingWorkflow {
+    @WorkflowMethod
+    fun recordBooking(booking: ArtajasaRecordBookingRequest)
+
+    @SignalMethod
+    fun confirmBooking()
+}</code></pre>
+      </div>
       <h2 id="endpoints">REST endpoint inventory (consolidated)</h2>
       <p>Extracted from <code>src/main</code> of each cloned service. Method mappings are relative to the listed <code>@RequestMapping</code> context path. Use this to locate the controller, then read the source for details.</p>
 
@@ -1271,6 +1437,7 @@ git -c safe.directory=/opt/atomepay/&lt;repo&gt; log --oneline -1</code></pre>
       <a href="#registration">Registration</a>
       <a href="#kyc">e-KYC</a>
       <a href="#partners">Partner integrations</a>
+      <a href="#partner-code">Key code</a>
       <a href="#endpoints">REST endpoints</a>
       <a href="#repos">Repository index</a>
       <a href="#envvars">Environment variables</a>
