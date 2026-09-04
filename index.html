@@ -1559,19 +1559,47 @@ git -c safe.directory=/opt/atomepay/&lt;repo&gt; log --oneline -1</code></pre>
         byId[id] = a;
         if (el) sections.push({ id: id, el: el });
       });
+      function revealInNav(a) {
+        // Scroll ONLY the nav container (sidebar/toc) to keep the active
+        // link visible — never touch the page scroll from here.
+        var host = a.closest('nav.sidebar, aside.toc');
+        if (!host) return;
+        var hr = host.getBoundingClientRect();
+        var ar = a.getBoundingClientRect();
+        if (ar.top < hr.top) host.scrollTop = Math.max(0, host.scrollTop + (ar.top - hr.top) - 4);
+        else if (ar.bottom > hr.bottom) host.scrollTop = Math.max(0, host.scrollTop + (ar.bottom - hr.bottom) + 4);
+      }
+
       function setActive(id) {
         allLinks.forEach(function (a) {
-          a.classList.toggle('active', a.getAttribute('href') === '#' + id);
-          if (a.classList.contains('active') && a.closest('nav.sidebar')) {
-            try { a.scrollIntoView({ block: 'nearest' }); } catch (e) {}
-          }
+          var on = a.getAttribute('href') === '#' + id;
+          a.classList.toggle('active', on);
+          if (on) revealInNav(a);
         });
       }
 
-      // Click → highlight immediately (scroll-spy then confirms)
+      // Click → manually scroll to the section top (below the sticky topbar).
+      // preventDefault stops the native hash-jump so nothing can fight the
+      // final position (previously scrollIntoView on the sidebar link was
+      // also scrolling the page and landing it off-target).
       allLinks.forEach(function (a) {
-        a.addEventListener('click', function () {
-          setActive(a.getAttribute('href').slice(1));
+        a.addEventListener('click', function (e) {
+          var id = a.getAttribute('href').slice(1);
+          var el = document.getElementById(id);
+          if (!el) return;
+          if (e.defaultPrevented) return;
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return; // open-in-new-tab
+          e.preventDefault();
+          setActive(id);
+          if (window.history && window.history.pushState) {
+            try { window.history.pushState(null, '', '#' + id); } catch (err) {}
+          }
+          var topbar = document.querySelector('.topbar');
+          var offset = (topbar ? topbar.offsetHeight : 56) + 16; // sticky header + breathing room
+          var y = el.getBoundingClientRect().top + window.pageYOffset - offset;
+          var top = Math.max(0, Math.round(y));
+          try { window.scrollTo({ top: top, behavior: 'smooth' }); }
+          catch (err) { try { window.scrollTo(0, top); } catch (err2) {} }
         });
       });
 
