@@ -30,7 +30,7 @@
     article h1[id], article h2[id], article h3[id] { scroll-margin-top: 64px; }
     .eptable { font-size: 13px; width: 100%; }
     .eptable td:first-child { white-space: nowrap; font-weight: 600; }
-    .eptable td.mono, .eptable .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+    .eptable td.mono, .eptable .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; word-break: break-word; }
     .eptable tr.ctx td { background: rgba(255,255,255,.6); color: var(--muted); }
     .eptable .ctx-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
     article { padding: 40px 52px 80px; max-width: 820px; min-width: 0; }
@@ -51,10 +51,14 @@
     .callout .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); margin-bottom: 3px; font-weight: 700; }
     .callout.warn .label { color: #f59f00; }
     .callout.danger .label { color: #e03131; }
-    table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; table-layout: auto; }
     th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
     th { background: var(--surface); font-weight: 600; font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
     tr:hover td { background: rgba(12, 166, 120, 0.04); }
+    .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 16px 0; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+    .table-wrap table { margin: 0; border: none; }
+    .table-wrap th, .table-wrap td { white-space: nowrap; }
+    .table-wrap td.mono, .table-wrap .mono { word-break: normal; }
     .toc { padding: 40px 22px 24px; font-size: 13px; border-left: 1px solid var(--border); position: sticky; top: 50px; height: calc(100vh - 50px); overflow-y: auto; }
     .toc .toc-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 10px; font-weight: 600; }
     .toc a { display: block; color: var(--muted); text-decoration: none; padding: 4px 0; }
@@ -100,6 +104,14 @@
         <a href="#qris">QRIS · Top-up · PPOB</a>
         <a href="#registration">Registration</a>
         <a href="#kyc">e-KYC</a>
+      </div>
+      <div class="group">
+        <div class="group-label">Partners</div>
+        <a href="#partner-vida">VIDA (e-KYC)</a>
+        <a href="#partner-gdc">GDC Pay</a>
+        <a href="#partner-doku">Doku</a>
+        <a href="#partner-artajasa">Artajasa</a>
+        <a href="#partner-rintis">Rintis</a>
       </div>
       <div class="group">
         <div class="group-label">Reference</div>
@@ -166,7 +178,8 @@ flowchart TB
       </div>
 
       <h2 id="techstack">Tech stack</h2>
-      <table>
+      <div class="table-wrap">
+<table>
         <tr><th>Layer</th><th>Technology</th></tr>
         <tr><td>Language / framework</td><td>Kotlin, Java 21 · Spring Boot 3.5.x</td></tr>
         <tr><td>Databases</td><td>PostgreSQL (JPA/Hibernate, Flyway in <code>migrations/</code>), MongoDB (reference data), Redis (cache/transient)</td></tr>
@@ -177,6 +190,7 @@ flowchart TB
         <tr><td>Shared lib</td><td><code>com.atomepay:atomepay-common</code> (embedded as git submodule <code>shared/atomepay-common</code>)</td></tr>
         <tr><td>Build</td><td><code>./mvnw clean install</code> (also builds the shared submodule)</td></tr>
       </table>
+      </div>
 
       <h2 id="services">Service map</h2>
       <p>Twelve core backend microservices (cloned at <code>/opt/atomepay/</code>, branch <code>develop</code>):</p>
@@ -198,7 +212,8 @@ flowchart TB
       <p><small>* Ports marked * overlap in yml samples because some bind via env vars — confirm from the service's own <code>application*.yml</code>.</small></p>
 
       <h2 id="shared">atomepay-common (shared library)</h2>
-      <table>
+      <div class="table-wrap">
+<table>
         <tr><th>Package</th><th>Contents</th></tr>
         <tr><td><code>config/properties/</code></td><td><code>DokuBillerServiceProperties</code>, <code>DokuCashoutServiceProperties</code>, <code>DokuPayoutServiceProperties</code>, <code>GdcPayServiceProperties</code>, <code>FdsProperties</code>, <code>JwtProperties</code>, <code>OtpProperties</code>, <code>SecurityProperties</code>, <code>ServiceProperties</code>, <code>StorageProperties</code></td></tr>
         <tr><td><code>security/filter/</code></td><td><code>JWTAuthenticationFilter</code>, <code>InternalApiFilter</code>, <code>BackofficeApiFilter</code>, <code>ClientTokenAuthenticationFilter</code></td></tr>
@@ -207,6 +222,7 @@ flowchart TB
         <tr><td><code>validation/</code></td><td><code>LuhnValidator</code>, <code>IsoCurrency</code>, <code>Base64Validator</code>, <code>RecentInstant</code></td></tr>
         <tr><td><code>dto/</code></td><td><code>SuccessResponse</code>, <code>ErrorCodeDtos</code>, <code>Pagination</code>, <code>TokenDtos</code></td></tr>
       </table>
+      </div>
 
       <h2 id="security">Security model</h2>
       <ul>
@@ -510,11 +526,216 @@ sequenceDiagram
   </div>
       <p class="diagram-caption">e-KYC — KTP OCR (VIDA) + blacklist check, liveness check, and VIDA fraud assessment, updating the KYC workflow status at each stage.</p>
 
+      <h2 id="partners">Partner integrations</h2>
+      <p>APB integrates with five external providers. Each has its own config properties (in <code>atomepay-common</code> + each service's <code>application.yml</code>), signature/security scheme, and Temporal workflow shape.</p>
+
+      <!-- ================= VIDA ================= -->
+      <h3 id="partner-vida">VIDA — e-KYC (OCR · liveness · fraud)</h3>
+      <div class="table-wrap">
+      <table class="eptable">
+        <tr><th style="width:230px">Config key</th><th>Env var</th><th>Purpose</th></tr>
+        <tr><td><code>atomepay.vida.ocr.base-url</code></td><td class="mono">VIDA_OCR_SERVICE_URL</td><td>KTP OCR endpoint (processor <code>v2</code>)</td></tr>
+        <tr><td><code>atomepay.vida.api.auth-url</code></td><td class="mono">VIDA_AUTH_URL</td><td>OAuth token endpoint</td></tr>
+        <tr><td><code>atomepay.vida.api.base-url</code></td><td class="mono">VIDA_SERVICE_URL</td><td>Liveness + fraud assessment API</td></tr>
+        <tr><td><code>atomepay.vida.credentials.client-id</code></td><td class="mono">VIDA_CLIENT_ID</td><td>Client id (OAuth)</td></tr>
+        <tr><td><code>atomepay.vida.credentials.client-secret</code></td><td class="mono">VIDA_CLIENT_SECRET</td><td>Client secret</td></tr>
+        <tr><td><code>atomepay.vida.credentials.grant-type</code></td><td class="mono">VIDA_GRANT_TYPE</td><td>OAuth grant (e.g. client_credentials)</td></tr>
+        <tr><td><code>atomepay.vida.image.max-size</code></td><td class="mono">—</td><td>Max KTP image size (KB, default 1024)</td></tr>
+      </table>
+      </div>
+      <div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant K as ekyc-service
+    participant A as VidaAuthClient
+    participant V as VIDA
+    participant S as Storage (PVC/OSS)
+    K->>A: fetch OAuth token (client-id/secret/grant-type)
+    A-->>K: access_token
+    K->>V: POST /ocr (KTP image, processor v2)
+    V-->>K: VidaOcrTransaction (OCR fields)
+    K->>S: upload KTP image
+    K->>K: save OCR results + check blacklist
+    K->>V: POST /liveness (fetch details + selfie)
+    V-->>K: liveness result
+    K->>S: upload selfie
+    K->>V: POST /fraud-assessment
+    V-->>K: assessment result
+    K->>K: update KYC workflow status
+  </div>
+      <p class="diagram-caption">VIDA integration — OAuth token then OCR / liveness / fraud calls from ekyc-service, driven by KtpProcessingWorkflow · LivenessCheckWorkflow · FraudAssessmentWorkflow (Temporal).</p>
+
+      <!-- ================= GDC ================= -->
+      <h3 id="partner-gdc">GDC Pay — bank transfer</h3>
+      <div class="table-wrap">
+      <table class="eptable">
+        <tr><th style="width:230px">Config key</th><th>Env var</th><th>Purpose</th></tr>
+        <tr><td><code>atomepay.services.gdc-pay.url</code></td><td class="mono">GDC_PAY_API_URL</td><td>GDC API base URL</td></tr>
+        <tr><td><code>gdc-pay.client.id / secret</code></td><td class="mono">GDC_PAY_CLIENT_ID / GDC_PAY_CLIENT_SECRET</td><td>OAuth client creds</td></tr>
+        <tr><td><code>gdc-pay.api.key / secret</code></td><td class="mono">GDC_PAY_API_KEY / GDC_PAY_API_SECRET</td><td>API signing key/secret</td></tr>
+        <tr><td><code>gdc-pay.settings.min-amount</code></td><td class="mono">GDC_MIN_AMOUNT</td><td>Min transfer amount (default 15000)</td></tr>
+        <tr><td><code>gdc-pay.settings.total-fee</code></td><td class="mono">GDC_FEE_AMOUNT</td><td>Transfer fee</td></tr>
+        <tr><td><code>gdc-pay.settings.transfer-timeout-minutes</code></td><td class="mono">GDC_TRANSFER_TIMEOUT_MINUTES</td><td>Workflow await timeout (default 6)</td></tr>
+        <tr><td><code>gdc-pay.icon-asset-url</code></td><td class="mono">GDC_ICON_ASSET_URL</td><td>Bank icon asset</td></tr>
+      </table>
+      </div>
+      <div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant T as transfer-service
+    participant W as BankTransferDebitWorkflow
+    participant G as GDC Pay
+    participant N as notification-service
+    C->>T: POST /api/v1/transfers/gdc/confirm
+    T->>W: start BankTransferDebitWorkflow → HOLD balance
+    T->>G: POST /payout (client-id + api key signature)
+    G-->>T: response
+    T->>T: create GdcTransactionOrder (RECEIVED) · history PENDING
+    par signal vs timeout (GdcTransferWorkflow)
+        G->>T: POST /api/v1/transfers/gdc/notification (webhook)
+        T->>T: signal cancelCheckStatusDelay → re-fetch refreshed order
+    and
+        Note over T: timeout (N min) → GDC status check activity
+        T->>G: status check
+        G-->>T: status
+    end
+    T-->>W: commit / release hold
+    T->>N: push notification + final history
+    Note over T: error → saga compensation: order FAILED + release hold
+  </div>
+      <p class="diagram-caption">GDC Pay — OAuth client + API key signing, HOLD via BankTransferDebitWorkflow, webhook-signal vs timeout status check.</p>
+
+      <!-- ================= Doku ================= -->
+      <h3 id="partner-doku">Doku — bank transfer · cashout · PPOB biller</h3>
+      <div class="table-wrap">
+      <table class="eptable">
+        <tr><th style="width:230px">Config key</th><th>Env var</th><th>Purpose</th></tr>
+        <tr><td><code>doku.payout.agent-key</code></td><td class="mono">DOKU_SERVICE_AGENT_KEY</td><td>Agent key (signature)</td></tr>
+        <tr><td><code>doku.payout.base-url</code></td><td class="mono">DOKU_SERVICE_BASE_URL</td><td>Doku API base URL</td></tr>
+        <tr><td><code>doku.payout.channel-id</code></td><td class="mono">DOKU_SERVICE_CHANNEL</td><td>Channel (default H2H)</td></tr>
+        <tr><td><code>doku.payout.client-id / client-secret</code></td><td class="mono">DOKU_SERVICE_CLIENT_ID / _SECRET</td><td>OAuth client creds</td></tr>
+        <tr><td><code>doku.payout.encryption-key</code></td><td class="mono">DOKU_SERVICE_ENCRYPTION_KEY</td><td>AES key for signature</td></tr>
+        <tr><td><code>doku.payout.private-key</code></td><td class="mono">DOKU_SERVICE_PRIVATE_KEY</td><td>RSA private key</td></tr>
+        <tr><td><code>doku.payout.minimum-amount</code></td><td class="mono">DOKU_SERVICE_MINIMUM_AMOUNT</td><td>Min amount</td></tr>
+        <tr><td><code>doku.payout.timeout-seconds</code></td><td class="mono">DOKU_SERVICE_TIMEOUT_SECONDS</td><td>HTTP timeout (default 30)</td></tr>
+        <tr><td><code>doku.biller.base-url / shared-key / mall-id</code></td><td class="mono">DOKU_BASE_URL / DOKU_SHARED_KEY / DOKU_MALL_ID</td><td>PPOB biller config</td></tr>
+        <tr><td><code>doku.cashout.*</code></td><td class="mono">DOKU_CASHOUT_*</td><td>Cashout: client-id, secret, sender, Indomaret store (I01, 50k-1M, step 50k)</td></tr>
+      </table>
+      </div>
+      <div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant T as transfer-service / ppob-service
+    participant W as BankTransferDebitWorkflow
+    participant D as Doku
+    participant N as notification-service
+    C->>T: POST /api/v1/transfers/doku/confirm (or /api/v1/biller/doku)
+    T->>W: start BankTransferDebitWorkflow → HOLD balance
+    T->>D: POST /payout (AES(agentKey+requestId, encryptionKey) signature)
+    D-->>T: response
+    T->>T: create DokuTransactionOrder (RECEIVED) · history PENDING
+    alt final SUCCESS/FAILED
+        T-->>W: commit / release hold · final history · push
+    else still RECEIVED
+        Note over T: exit, await async webhook
+        D->>T: POST /api/v1/transfers/doku/notifications/unpaid (or /refund)
+        T->>T: verify AES signature · DokuNotificationWorkflow
+        T-->>W: BankTransferConfirmDebitWorkflow (commit/release)
+        T->>N: push notification
+    else error
+        Note over T: SAGA COMPENSATION → order FAILED + release hold
+    end
+  </div>
+      <p class="diagram-caption">Doku — AES(agentKey+requestId) signature, transactional saga with HOLD, async unpaid/refund webhooks, saga compensation.</p>
+
+      <!-- ================= Artajasa ================= -->
+      <h3 id="partner-artajasa">Artajasa — QRIS · top-up</h3>
+      <div class="table-wrap">
+      <table class="eptable">
+        <tr><th style="width:230px">Config key</th><th>Env var</th><th>Purpose</th></tr>
+        <tr><td><code>atomepay.services.artajasa.username</code></td><td class="mono">ARTAJASA_USERNAME</td><td>API username (signature check)</td></tr>
+        <tr><td><code>atomepay.services.artajasa.secret-key</code></td><td class="mono">ARTAJASA_SECRET_KEY</td><td>Secret key</td></tr>
+        <tr><td><code>atomepay.services.artajasa.signature-hash</code></td><td class="mono">ARTAJASA_SIGNATURE_HASH</td><td>Expected signature hash</td></tr>
+        <tr><td><code>artajasa.status-inquiry-url</code></td><td class="mono">ARTAJASA_STATUS_INQUIRY_URL</td><td>Status inquiry endpoint</td></tr>
+        <tr><td><code>artajasa.qris.base-url</code></td><td class="mono">ARTAJASA_QRIS_BASE_URL</td><td>QRIS API base URL</td></tr>
+        <tr><td><code>artajasa.qris.forwarding-id</code></td><td class="mono">ARTAJASA_QRIS_FORWARDING_ID</td><td>QRIS forwarding id</td></tr>
+        <tr><td><code>artajasa.qris.issuer-id</code></td><td class="mono">ARTAJASA_QRIS_ISSUER_ID</td><td>QRIS issuer id</td></tr>
+        <tr><td><code>artajasa.qris.secret-key</code></td><td class="mono">ARTAJASA_QRIS_SECRET_KEY</td><td>QRIS secret key</td></tr>
+        <tr><td><code>atomepay.fee.topup.artajasa</code></td><td class="mono">FEE_TOPUP_ARTAJASA</td><td>Top-up fee</td></tr>
+      </table>
+      </div>
+      <div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant App as Mobile App
+    participant A as account-service
+    participant P as payment-service
+    participant T as topup-service
+    participant AR as Artajasa
+    App->>A: POST /api/v1/artajasa (inquiry + booking)
+    A->>A: verify username + signature
+    A->>A: ArtajasaRecordBookingWorkflow (TOPUP_RECORD_BOOKING_TASK_QUEUE)
+    App->>P: POST /api/v1/qr/payment (QRIS)
+    P->>P: ArtajasaQrisPaymentWorkflow (QRIS_MERCHANT_PAYMENT_TASK_QUEUE)
+    P->>AR: sendPaymentCreditTransaction
+    AR-->>P: response (APPROVED / RESPONSE_TOO_LATE / ...)
+    alt RESPONSE_TOO_LATE
+        P->>AR: checkTransactionStatus(referenceNumber)
+    end
+    AR->>T: POST /api/v1/artajasa (payment notification, top-up)
+    T->>T: verify username + signature (ILLEGAL_SIGNATURE if mismatch)
+    T->>T: ArtajasaNotificationWorkflow → TopupWalletWorkflow
+    T->>A: credit wallet (ACCOUNT_SERVICE_TASK_QUEUE)
+    T->>T: TopupHistoryWorkflow + notification
+    T-->>AR: TransactionStatusCode response (SUCCESS / ALREADY_PAID / FAILED ...)
+  </div>
+      <p class="diagram-caption">Artajasa — username+signature-hash verification on both inquiry (account-service) and notification (topup-service); QRIS payment on payment-service.</p>
+
+      <!-- ================= Rintis ================= -->
+      <h3 id="partner-rintis">Rintis — top-up notification / reference</h3>
+      <div class="table-wrap">
+      <table class="eptable">
+        <tr><th style="width:230px">Config key</th><th>Env var</th><th>Purpose</th></tr>
+        <tr><td><code>atomepay.services.rintis.client-id</code></td><td class="mono">RINTIS_CLIENT_ID</td><td>Rintis client id</td></tr>
+        <tr><td><code>rintis.keycloak.auth-server-url</code></td><td class="mono">OAUTH2_JWK_BASE_URL</td><td>Keycloak auth server</td></tr>
+        <tr><td><code>rintis.keycloak.realm</code></td><td class="mono">OAUTH2_JWK_REALM</td><td>Keycloak realm</td></tr>
+        <tr><td><code>rintis.text.id.* / en.*</code></td><td class="mono">RINTIS_TEXT_ID_* / RINTIS_TEXT_EN_*</td><td>Notification message templates (name, ref-no, product, amount, fee, total)</td></tr>
+        <tr><td><code>atomepay.fee.topup.rintis</code></td><td class="mono">FEE_TOPUP_RINTIS</td><td>Top-up fee</td></tr>
+      </table>
+      </div>
+      <div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant R as Rintis
+    participant T as topup-service
+    participant W as TopupWalletWorkflow
+    participant A as account-service
+    participant H as history-service
+    R->>T: POST /api/v1/rintis/notification (command=PAYMENT)
+    T->>T: RintisPaymentService.handlePayment
+    alt command != PAYMENT
+        T-->>R: INVALID_TRANSACTION error
+    end
+    T->>T: find order + verify -> RintisNotificationWorkflow
+    T->>H: sendTransactionHistory PENDING (async)
+    T->>W: start TopupWalletWorkflow (ACCOUNT_SERVICE_TASK_QUEUE)
+    W->>A: credit wallet balance
+    W-->>T: success
+    T->>T: finalStatus PROCESSED_SUCCESS → history COMPLETED
+    T->>T: updateRintisFinalOrderStatus (partnerTransactionId)
+    T->>R: send Rintis top-up notification (id/en template)
+    Note over T: on wallet credit failure → forwards ChildWorkflowFailure
+  </div>
+      <p class="diagram-caption">Rintis — Keycloak (JWK) auth; PAYMENT command triggers wallet credit via TopupWalletWorkflow and returns status codes; text templates per locale.</p>
+
       <h2 id="endpoints">REST endpoint inventory (consolidated)</h2>
       <p>Extracted from <code>src/main</code> of each cloned service. Method mappings are relative to the listed <code>@RequestMapping</code> context path. Use this to locate the controller, then read the source for details.</p>
 
       <h3>account-service</h3>
-      <table class="eptable">
+      <div class="table-wrap">
+<table class="eptable">
         <tr><th style="width:70px">Method</th><th>Path</th></tr>
       <tr><td>GET</td><td class="mono">/account/{appUserId}/details</td></tr>
       <tr><td>GET</td><td class="mono">/account/{accountNumber}/wallet-transaction</td></tr>
@@ -530,9 +751,11 @@ sequenceDiagram
 
       <tr class="ctx"><td colspan="2"><span class="ctx-label">@RequestMapping</span> <code>/api/v1/artajasa</code> · <code>/api/v1/backoffice</code> · <code>/api/v1/biller(/doku)</code> · <code>/api/v1/cashout(/doku)</code> · <code>/api/v1/qr(/artajasa)</code> · <code>/api/v1/internal</code> · <code>/api/v1/rintis</code> · <code>/api/v1/transfers(/atome,/doku,/gdc)</code></td></tr>
       </table>
+      </div>
 
       <h3>app-user-service</h3>
-      <table class="eptable">
+      <div class="table-wrap">
+<table class="eptable">
         <tr><th style="width:70px">Method</th><th>Path</th></tr>
       <tr><td>POST</td><td class="mono">/start</td></tr>
       <tr><td>POST</td><td class="mono">/transaction</td></tr>
@@ -574,9 +797,11 @@ sequenceDiagram
 
       <tr class="ctx"><td colspan="2"><span class="ctx-label">@RequestMapping</span> <code>/api/v1</code> · <code>/api/v1/backoffice</code></td></tr>
       </table>
+      </div>
 
       <h3>blacklist-service</h3>
-      <table class="eptable">
+      <div class="table-wrap">
+<table class="eptable">
         <tr><th style="width:70px">Method</th><th>Path</th></tr>
       <tr><td>GET</td><td class="mono">/blacklist-individual</td></tr>
       <tr><td>GET</td><td class="mono">/blacklist-individual/csv-template</td></tr>
@@ -587,9 +812,11 @@ sequenceDiagram
 
       <tr class="ctx"><td colspan="2"><span class="ctx-label">@RequestMapping</span> <code>/api/v1/backoffice</code> · <code>/api/v1/internal/blacklist</code></td></tr>
       </table>
+      </div>
 
       <h3>ekyc-service</h3>
-      <table class="eptable">
+      <div class="table-wrap">
+<table class="eptable">
         <tr><th style="width:70px">Method</th><th>Path</th></tr>
       <tr><td>GET</td><td class="mono">/workflows</td></tr>
       <tr><td>GET</td><td class="mono">/workflows/{id}</td></tr>
@@ -608,9 +835,11 @@ sequenceDiagram
 
       <tr class="ctx"><td colspan="2"><span class="ctx-label">@RequestMapping</span> <code>/api/v1/kyc</code> · <code>/api/v1/backoffice/kyc</code> · <code>/api/v1/internal/kyc</code></td></tr>
       </table>
+      </div>
 
       <h3>transfer-service</h3>
-      <table class="eptable">
+      <div class="table-wrap">
+<table class="eptable">
         <tr><th style="width:70px">Method</th><th>Path</th></tr>
       <tr><td>GET</td><td class="mono">/order</td></tr>
       <tr><td>GET</td><td class="mono">/order/export</td></tr>
@@ -637,9 +866,11 @@ sequenceDiagram
 
       <tr class="ctx"><td colspan="2"><span class="ctx-label">@RequestMapping</span> <code>/api/v1/transfers</code> · <code>/api/v1/transfers/atome</code> · <code>/api/v1/transfers/doku</code> · <code>/api/v1/transfers/doku/notifications</code> · <code>/api/v1/transfers/gdc</code> · <code>/api/v1/cashout</code> · <code>/api/v1/cashout/doku</code> · <code>/api/v1/internal/gdc</code></td></tr>
       </table>
+      </div>
 
       <h3>payment-service</h3>
-      <table class="eptable">
+      <div class="table-wrap">
+<table class="eptable">
         <tr><th style="width:70px">Method</th><th>Path</th></tr>
       <tr><td>GET</td><td class="mono">/{referenceNumber}</td></tr>
       <tr><td>GET</td><td class="mono">/artajasa/order</td></tr>
@@ -658,9 +889,11 @@ sequenceDiagram
 
       <tr class="ctx"><td colspan="2"><span class="ctx-label">@RequestMapping</span> <code>/api/v1/qr</code> · <code>/api/v1/qr/artajasa</code> · <code>/api/v1/qr/artajasa/network</code> · <code>/api/v1/backoffice/qris</code></td></tr>
       </table>
+      </div>
 
       <h3>ppob-service</h3>
-      <table class="eptable">
+      <div class="table-wrap">
+<table class="eptable">
         <tr><th style="width:70px">Method</th><th>Path</th></tr>
       <tr><td>GET</td><td class="mono">/{referenceNumber}</td></tr>
       <tr><td>GET</td><td class="mono">/doku/order</td></tr>
@@ -671,9 +904,11 @@ sequenceDiagram
 
       <tr class="ctx"><td colspan="2"><span class="ctx-label">@RequestMapping</span> <code>/api/v1/biller</code> · <code>/api/v1/biller/doku</code></td></tr>
       </table>
+      </div>
 
       <h3>topup-service</h3>
-      <table class="eptable">
+      <div class="table-wrap">
+<table class="eptable">
         <tr><th style="width:70px">Method</th><th>Path</th></tr>
       <tr><td>GET</td><td class="mono">/order</td></tr>
       <tr><td>GET</td><td class="mono">/order/export</td></tr>
@@ -683,9 +918,11 @@ sequenceDiagram
 
       <tr class="ctx"><td colspan="2"><span class="ctx-label">@RequestMapping</span> <code>/api/v1/artajasa</code> · <code>/api/v1/internal/artajasa</code> · <code>/api/v1/rintis/notification</code></td></tr>
       </table>
+      </div>
 
       <h3>transaction-history-service</h3>
-      <table class="eptable">
+      <div class="table-wrap">
+<table class="eptable">
         <tr><th style="width:70px">Method</th><th>Path</th></tr>
       <tr><td>GET</td><td class="mono">/available-periods</td></tr>
       <tr><td>GET</td><td class="mono">/biller/{billerName}</td></tr>
@@ -703,9 +940,11 @@ sequenceDiagram
 
       <tr class="ctx"><td colspan="2"><span class="ctx-label">@RequestMapping</span> <code>/api/v1/transactions</code> · <code>/api/v1/transactions/e-statement</code> · <code>/api/v1/contacts</code> · <code>/api/v1/backoffice/transactions</code></td></tr>
       </table>
+      </div>
 
       <h3>notification-service · home-service</h3>
-      <table class="eptable">
+      <div class="table-wrap">
+<table class="eptable">
         <tr><th style="width:70px">Method</th><th>Path</th></tr>
       <tr><td>GET</td><td class="mono">/notification</td></tr>
       <tr><td>GET</td><td class="mono">/notification/status</td></tr>
@@ -720,9 +959,11 @@ sequenceDiagram
 
       <tr class="ctx"><td colspan="2"><span class="ctx-label">@RequestMapping</span> <code>/api/v1 (notification)</code> · <code>/api/v1/ (home)</code></td></tr>
       </table>
+      </div>
 
       <h2 id="repos">Repository index</h2>
-      <table>
+      <div class="table-wrap">
+<table>
         <tr><th>Repo</th><th>Stack</th><th>Role</th></tr>
         <tr><td>account-service</td><td><span>Kotlin</span></td><td>Wallet core (8081*)</td></tr>
         <tr><td>app-user-service</td><td><span>Kotlin</span></td><td>User lifecycle</td></tr>
@@ -755,10 +996,12 @@ sequenceDiagram
         <tr><td>image-collections</td><td><span class="tag other">docker</span></td><td>Docker base images</td></tr>
         <tr><td>ktp-generator</td><td><span class="tag py">python</span></td><td>KTP test-data generator</td></tr>
       </table>
+      </div>
 
       <h2 id="envvars">Environment variables by service</h2>
       <p>Extracted from each service's <code>application.yml</code> <code>${ENV}</code> placeholder references (plus staging k8s ConfigMap/Secret refs). Passwords/secrets ship via k8s <code>Secret</code>s; non-sensitive config via <code>ConfigMap</code>.</p>
-      <table class="eptable">
+      <div class="table-wrap">
+<table class="eptable">
         <tr><th style="width:280px">Variable</th><th>Purpose</th></tr>
 <tr><td colspan="2" class="ctx"><span class="ctx-label">■ account-service</span></td></tr>
 <tr><td class="mono">ARTAJASA_QRIS_BASE_URL</td><td>Artajasa QRIS base endpoint</td></tr>
@@ -989,6 +1232,7 @@ sequenceDiagram
 <tr><td class="mono">POSTGRES_*</td><td>PostgreSQL (config backend)</td></tr>
 <tr><td class="mono">ZERO_TRUST_SERVICE_KEY</td><td>Internal API key</td></tr>
       </table>
+      </div>
 
       <h2 id="localdev">Local development</h2>
       <pre><code># Build one service (also builds shared/atomepay-common)
@@ -1026,6 +1270,7 @@ git -c safe.directory=/opt/atomepay/&lt;repo&gt; log --oneline -1</code></pre>
       <a href="#qris">QRIS · Top-up · PPOB</a>
       <a href="#registration">Registration</a>
       <a href="#kyc">e-KYC</a>
+      <a href="#partners">Partner integrations</a>
       <a href="#endpoints">REST endpoints</a>
       <a href="#repos">Repository index</a>
       <a href="#envvars">Environment variables</a>
