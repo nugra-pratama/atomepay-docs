@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AtomePay (APB) — Platform Documentation</title>
+  <style>
+    :root {
+      --bg: #fafaf9; --fg: #1c1b1a; --muted: #6b6964; --border: #e6e4e0;
+      --accent: #0ca678; --accent-dark: #087f5b; --surface: #ffffff; --code-bg: #f4f4f2;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.6 -apple-system, system-ui, sans-serif; }
+    .topbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 12px 28px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 10; }
+    .topbar .brand { font-weight: 700; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+    .topbar .brand .logo { width: 22px; height: 22px; border-radius: 6px; background: var(--accent); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; }
+    .topbar .badge { font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 99px; padding: 2px 10px; }
+    .topbar input { padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border); width: 280px; font: inherit; background: var(--bg); }
+    .layout { display: grid; grid-template-columns: 250px minmax(0, 1fr) 230px; min-height: calc(100vh - 50px); }
+    @media (max-width: 1100px) { .layout { grid-template-columns: 230px 1fr; } .toc { display: none; } }
+    @media (max-width: 760px) { .layout { grid-template-columns: 1fr; } .sidebar { display: none; } }
+    .sidebar { padding: 24px 14px; border-right: 1px solid var(--border); overflow-y: auto; font-size: 13.5px; position: sticky; top: 50px; height: calc(100vh - 50px); }
+    .sidebar .group { margin-bottom: 20px; }
+    .sidebar .group-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; padding: 0 8px 8px; font-weight: 600; }
+    .sidebar a { display: block; color: var(--fg); text-decoration: none; padding: 5px 8px; border-radius: 6px; }
+    .sidebar a:hover { background: var(--surface); }
+    .sidebar a.active { background: var(--accent); color: white; }
+    .sidebar a small { color: var(--muted); }
+    article { padding: 40px 52px 80px; max-width: 820px; min-width: 0; }
+    .crumbs { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
+    h1 { font-size: 34px; letter-spacing: -0.02em; margin: 0 0 10px; }
+    .lede { color: var(--muted); font-size: 17px; margin: 0 0 28px; }
+    h2 { font-size: 22px; letter-spacing: -0.01em; margin: 44px 0 12px; padding-top: 8px; border-top: 1px solid var(--border); }
+    h3 { font-size: 16px; margin: 26px 0 8px; }
+    p { margin: 12px 0; }
+    ul, ol { margin: 10px 0; padding-left: 22px; }
+    li { margin: 4px 0; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; font-size: 0.9em; }
+    pre { background: #1e1e1e; color: #f4f4f2; border-radius: 10px; padding: 14px 18px; overflow-x: auto; font-size: 12.5px; line-height: 1.55; }
+    pre code { background: transparent; padding: 0; color: inherit; }
+    .callout { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 8px; padding: 12px 16px; margin: 18px 0; font-size: 14px; }
+    .callout.warn { border-left-color: #f59f00; }
+    .callout.danger { border-left-color: #e03131; }
+    .callout .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); margin-bottom: 3px; font-weight: 700; }
+    .callout.warn .label { color: #f59f00; }
+    .callout.danger .label { color: #e03131; }
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+    th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { background: var(--surface); font-weight: 600; font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+    tr:hover td { background: rgba(12, 166, 120, 0.04); }
+    .toc { padding: 40px 22px 24px; font-size: 13px; border-left: 1px solid var(--border); position: sticky; top: 50px; height: calc(100vh - 50px); overflow-y: auto; }
+    .toc .toc-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 10px; font-weight: 600; }
+    .toc a { display: block; color: var(--muted); text-decoration: none; padding: 4px 0; }
+    .toc a:hover { color: var(--accent); }
+    .pager { display: flex; justify-content: space-between; gap: 12px; margin-top: 56px; padding-top: 24px; border-top: 1px solid var(--border); }
+    .tag { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 99px; border: 1px solid var(--border); color: var(--muted); margin-left: 6px; vertical-align: 2px; }
+    .tag.maven { color: #5c7cfa; border-color: #dbe4ff; background: #edf2ff; }
+    .tag.node { color: #2f9e44; border-color: #d3f9d8; background: #ebfbee; }
+    .tag.py { color: #f59f00; border-color: #fff3bf; background: #fff9db; }
+    .tag.other { color: #868e96; }
+    .svc-table td:first-child { font-family: ui-monospace, monospace; font-size: 12.5px; white-space: nowrap; }
+    .mermaid { margin: 18px 0; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; overflow-x: auto; }
+    .mermaid svg { max-width: 100%; height: auto; }
+    .diagram-caption { font-size: 12.5px; color: var(--muted); margin: -8px 0 22px; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <span class="brand"><span class="logo">AP</span> AtomePay docs <span class="tag other">APB</span></span>
+    <span class="badge">Internal platform documentation</span>
+  </header>
+  <div class="layout">
+    <nav class="sidebar">
+      <div class="group">
+        <div class="group-label">Overview</div>
+        <a href="#overview" class="active">What is AtomePay</a>
+        <a href="#architecture">Architecture</a>
+        <a href="#techstack">Tech stack</a>
+      </div>
+      <div class="group">
+        <div class="group-label">Services</div>
+        <a href="#services">Service map</a>
+        <a href="#shared">atomepay-common</a>
+        <a href="#security">Security model</a>
+      </div>
+      <div class="group">
+        <div class="group-label">Flows</div>
+        <a href="#transfers">Transfers (Atome/Doku/GDC)</a>
+        <a href="#qris">QRIS · Top-up · PPOB</a>
+        <a href="#kyc">e-KYC</a>
+      </div>
+      <div class="group">
+        <div class="group-label">Reference</div>
+        <a href="#endpoints">REST endpoints</a>
+        <a href="#repos">Repository index</a>
+        <a href="#localdev">Local development</a>
+      </div>
+    </nav>
+    <article>
+      <div class="crumbs">AtomePay · APB documentation</div>
+      <h1 id="overview">AtomePay (APB) — Platform Documentation</h1>
+      <p class="lede">AtomePay is Atome's Indonesia digital-wallet &amp; pay-later backend platform. This site documents the microservices, REST APIs, Temporal workflows, provider integrations, and infrastructure under the <code>atomepay</code> GitHub org.</p>
+
+      <div class="callout">
+        <div class="label">Source of truth</div>
+        Code is the source of truth. All ~30 org repos are cloned locally; each service is self-contained. Endpoint lists here are an inventory to locate code, not a substitute for reading the controllers.
+      </div>
+
+      <h2 id="architecture">System architecture</h2>
+      <p>APB is a set of independently deployable Spring Boot 3 microservices (Kotlin, Java 21) orchestrated with <strong>Temporal</strong> for every multi-step / external-dependent flow. PostgreSQL (JPA/Hibernate, Flyway) holds transactional state, MongoDB holds reference data, Redis holds cache/transient state, Kafka handles messaging, and Spring Cloud Config centralizes configuration.</p>
+      <div class="mermaid">
+flowchart TB
+    subgraph Edge["Edge Layer"]
+      GW[API Gateway] -->|JWT / client token| Core
+    end
+    subgraph Core["Core Microservices"]
+      ACC[account-service] --- USR[app-user-service]
+      TRF[transfer-service] --- TOP[topup-service]
+      PAY[payment-service] --- PPB[ppob-service]
+      EKYC[ekyc-service] --- BLK[blacklist-service]
+      NOTIF[notification-service] --- TH[transaction-history-service]
+      HOM[home-service] --- CFG[config-service]
+    end
+    subgraph Infra["Platform"]
+      TMP[Temporal] -->|workflows + activities| Core
+      KFK[Kafka] --> Core
+      PG[(PostgreSQL)] --> Core
+      MG[(MongoDB)] --> Core
+      RD[(Redis)] --> Core
+      CFGSRV[Spring Cloud Config] --> Core
+    end
+    subgraph Partners["External Providers"]
+      DOKU[Doku] --> TRF
+      GDC[GDC Pay] --> TRF
+      ATA[Artajasa] --> PAY
+      ATA --> TOP
+      RIN[Rintis] --> TOP
+      ATM[Atome] --> TRF
+    end
+    Core --> Part["Provider adapters"]
+    Part --> Partners
+  </div>
+      <p class="diagram-caption">APB system overview — gateway fronting, Temporal-orchestrated microservices, and provider adapters (Doku / GDC / Artajasa / Rintis / Atome).</p>
+      <ul>
+        <li><strong>API gateway</strong> fronts public consumer endpoints; each service is also independently reachable internally.</li>
+        <li><strong>Temporal</strong> runs workflows + activities (e.g. <code>AtomeTransferWorkflow</code>, <code>DokuTransferWorkflow</code>, <code>GdcTransferWorkflow</code>, <code>*RecordBookingWorkflow</code>).</li>
+        <li><strong>Provider adapters</strong>: Doku (PPOB billers, cashout, payouts), GDC Pay (bank transfer), Artajasa (QRIS, top-up), Rintis (top-up notifications), Atome (internal wallet transfer).</li>
+        <li><strong>Observability</strong>: Spring Actuator + Prometheus + Logstash JSON logs.</li>
+      </ul>
+      <div class="callout warn">
+        <div class="label">Temporal queues</div>
+        Shared queues: <code>ACCOUNT_SERVICE_TASK_QUEUE</code>, <code>TOPUP_RECORD_BOOKING_TASK_QUEUE</code>, <code>TRANSFER_RECORD_BOOKING_TASK_QUEUE</code>, <code>QRIS_RECORD_BOOKING_TASK_QUEUE</code>, <code>PPOB_TASK_QUEUE</code>, <code>TRANSACTION_HISTORY_SERVICE_TASK_QUEUE</code>.
+      </div>
+
+      <h2 id="techstack">Tech stack</h2>
+      <table>
+        <tr><th>Layer</th><th>Technology</th></tr>
+        <tr><td>Language / framework</td><td>Kotlin, Java 21 · Spring Boot 3.5.x</td></tr>
+        <tr><td>Databases</td><td>PostgreSQL (JPA/Hibernate, Flyway in <code>migrations/</code>), MongoDB (reference data), Redis (cache/transient)</td></tr>
+        <tr><td>Orchestration</td><td>Temporal SDK — every multi-step/external flow is a workflow + activity pair</td></tr>
+        <tr><td>Messaging</td><td>Kafka (Spring Kafka); Actuator + Prometheus + Logstash JSON logs</td></tr>
+        <tr><td>Security</td><td>Spring Security OAuth2 JWT resource server; shared internal API key (<code>ZERO_TRUST_SERVICE_KEY</code>)</td></tr>
+        <tr><td>Config</td><td>Spring Cloud Config Server via <code>${CONFIG_SERVICE_URL}</code></td></tr>
+        <tr><td>Shared lib</td><td><code>com.atomepay:atomepay-common</code> (embedded as git submodule <code>shared/atomepay-common</code>)</td></tr>
+        <tr><td>Build</td><td><code>./mvnw clean install</code> (also builds the shared submodule)</td></tr>
+      </table>
+
+      <h2 id="services">Service map</h2>
+      <p>Twelve core backend microservices (cloned at <code>/opt/atomepay/</code>, branch <code>develop</code>):</p>
+      <table class="svc-table">
+        <tr><th>Service</th><th>Port</th><th>Responsibility</th></tr>
+        <tr><td>account-service</td><td>8081*</td><td>Digital-wallet core: wallets, balances, holds, inquiry; partner dirs <code>doku/ gdc/ artajasa/ atome/ rintis/</code></td></tr>
+        <tr><td>app-user-service</td><td>—</td><td>User lifecycle: register, login, OTP, biometric, PIN, forgot-PIN, referral, deletion; backoffice user mgmt</td></tr>
+        <tr><td>transfer-service</td><td>8890</td><td>Bank &amp; wallet transfers via Atome/Doku/GDC; cashout; notification webhooks; <code>TransferRoutingService</code></td></tr>
+        <tr><td>topup-service</td><td>8889</td><td>Top-up via Artajasa; status inquiry; Rintis notifications</td></tr>
+        <tr><td>payment-service</td><td>8091</td><td>QRIS payments/refunds via Artajasa; sign-on/off/echo/cutover</td></tr>
+        <tr><td>ppob-service</td><td>8012</td><td>PPOB billers (PLN) via Doku</td></tr>
+        <tr><td>ekyc-service</td><td>8082*</td><td>e-KYC: OCR (KTP), liveness, fraud assessment, AES-GCM / Aliyun KMS encryption</td></tr>
+        <tr><td>blacklist-service</td><td>8084</td><td>Blacklist checks &amp; management, CSV import/export</td></tr>
+        <tr><td>notification-service</td><td>—</td><td>Push (FCM), e-mail, topics, mark-read</td></tr>
+        <tr><td>transaction-history-service</td><td>8085</td><td>History, e-statements (PDF), favorites, suspicious-txn &amp; fraud detection</td></tr>
+        <tr><td>home-service</td><td>8087</td><td>Home content: banners, reminders, PPOB entry</td></tr>
+        <tr><td>config-service</td><td>8082</td><td>Spring Cloud Config server</td></tr>
+      </table>
+      <p><small>* Ports marked * overlap in yml samples because some bind via env vars — confirm from the service's own <code>application*.yml</code>.</small></p>
+
+      <h2 id="shared">atomepay-common (shared library)</h2>
+      <table>
+        <tr><th>Package</th><th>Contents</th></tr>
+        <tr><td><code>config/properties/</code></td><td><code>DokuBillerServiceProperties</code>, <code>DokuCashoutServiceProperties</code>, <code>DokuPayoutServiceProperties</code>, <code>GdcPayServiceProperties</code>, <code>FdsProperties</code>, <code>JwtProperties</code>, <code>OtpProperties</code>, <code>SecurityProperties</code>, <code>ServiceProperties</code>, <code>StorageProperties</code></td></tr>
+        <tr><td><code>security/filter/</code></td><td><code>JWTAuthenticationFilter</code>, <code>InternalApiFilter</code>, <code>BackofficeApiFilter</code>, <code>ClientTokenAuthenticationFilter</code></td></tr>
+        <tr><td><code>qris/</code></td><td><code>QrisData</code>, <code>QrisParser</code> — EMVCo QRIS payload parsing</td></tr>
+        <tr><td><code>generator/</code></td><td><code>ReferenceNumberGenerator</code></td></tr>
+        <tr><td><code>validation/</code></td><td><code>LuhnValidator</code>, <code>IsoCurrency</code>, <code>Base64Validator</code>, <code>RecentInstant</code></td></tr>
+        <tr><td><code>dto/</code></td><td><code>SuccessResponse</code>, <code>ErrorCodeDtos</code>, <code>Pagination</code>, <code>TokenDtos</code></td></tr>
+      </table>
+
+      <h2 id="security">Security model</h2>
+      <ul>
+        <li><strong>Public / partner-facing API</strong> → JWT resource server (<code>JWTAuthenticationFilter</code>), issuer <code>OAUTH2_JWT_ISSUER_URI</code>.</li>
+        <li><strong>Internal service-to-service</strong> → shared API key <code>ZERO_TRUST_SERVICE_KEY</code> via <code>InternalApiFilter</code> (e.g. <code>RintisApiFilter</code> in account-service is a variant).</li>
+        <li><strong>Back-office</strong> → <code>BackofficeApiFilter</code>; <strong>Client token</strong> → <code>ClientTokenAuthenticationFilter</code>.</li>
+      </ul>
+
+      <h2 id="transfers">Transfer flows</h2>
+      <p>All confirm endpoints share a shape: validate JWT/booking → start a Temporal workflow (async) → booking marked <code>PROCESSED</code> → respond immediately with the booking reference. A <code>*RecordBookingWorkflow</code> tracks the booking lifecycle; a final <code>confirmBooking</code> signal (in <code>finally</code>) completes it, otherwise the booking expires (~15 min).</p>
+
+      <h3>Atome — internal wallet transfer (no saga)</h3>
+      <div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant T as transfer-service
+    participant W as WalletTransferWorkflow (child)
+    participant H as transaction-history-service
+    participant N as notification-service
+    C->>T: POST /api/v1/transfers/atome/confirm
+    T->>T: validate JWT / booking / amount range
+    T->>T: start AtomeTransferWorkflow (Temporal)
+    Note over T: booking status = PROCESSED, respond with reference
+    T->>T: create AtomeTransactionOrder (RECEIVED)
+    T->>H: record outbound history PENDING (async)
+    T->>W: start WalletTransferWorkflow
+    W->>W: debit source / credit recipient (atomic)
+    W-->>T: done
+    alt success
+        T->>T: order -> PROCESSED_SUCCESS  /  WALLET_SEND -> COMPLETED
+        T->>N: push to sender (always)
+        T->>H: WALLET_RECEIVE COMPLETED
+        T->>N: push to recipient (success only)
+    else failure
+        T->>T: order -> PROCESSED_FAILED  /  WALLET_SEND -> FAILED
+    end
+    T->>T: signal confirmBooking (finally)
+  </div>
+      <p class="diagram-caption">Atome internal wallet transfer — no saga, no external payout. Atomicity lives inside the wallet child workflow.</p>
+      <p>Amount-range check (<code>[minimumAmount, maximumAmount]</code> from booking) is Atome-specific. No saga compensation — atomicity is inside the wallet child workflow.</p>
+
+      <h3>Doku — bank transfer, transactional saga + async webhooks</h3>
+      <div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant T as transfer-service
+    participant D as Doku
+    participant W as BankTransferDebitWorkflow (child)
+    participant E as ekyc-service
+    participant N as notification-service
+    C->>T: POST /api/v1/transfers/doku/confirm
+    T->>E: fetch KYC status (verified / unverified)
+    T->>W: start BankTransferDebitWorkflow -> HOLD balance
+    T->>D: POST /payout
+    D-->>T: response
+    T->>T: create DokuTransactionOrder (RECEIVED)  /  history PENDING
+    alt status InProgress / Timeout / Unknown
+        T->>D: poll Doku status
+        D-->>T: status
+    end
+    alt final SUCCESS / FAILED
+        T-->>W: commit / release hold
+        T->>N: push notification
+        T->>T: record final history
+    else still RECEIVED
+        Note over T: no history, no wallet finalize  -  exit, await async webhook
+        D->>T: POST /notifications/unpaid (or /refund)
+        T->>T: verify AES + agentKey signature  /  find order by transactionId
+        T->>T: DokuNotificationWorkflow -> commit/release hold
+        T->>N: push notification
+    else error
+        Note over T: SAGA COMPENSATION
+        T->>T: order -> FAILED  /  release wallet hold
+    end
+    T->>T: signal confirmBooking (finally)
+  </div>
+      <p class="diagram-caption">Doku bank transfer — transactional saga with hold, polling, async webhook finalization, and saga compensation on error.</p>
+      <p>Async path: Doku → <code>POST /api/v1/transfers/doku/notifications/unpaid</code> (or <code>/refund</code>) → verify AES+agentKey signature → <code>DokuNotificationWorkflow</code> → <code>BankTransferConfirmDebitWorkflow</code> (commit/release), final history, push notification.</p>
+
+      <h3>GDC — bank transfer, saga + signal/timeout wait</h3>
+      <div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant T as transfer-service
+    participant G as GDC
+    participant W as BankTransferDebitWorkflow (child)
+    participant N as notification-service
+    C->>T: POST /api/v1/transfers/gdc/confirm
+    T->>W: start BankTransferDebitWorkflow -> HOLD balance
+    T->>G: POST /payout
+    G-->>T: response
+    T->>T: create GdcTransactionOrder (RECEIVED)  /  history PENDING
+    par signal vs timeout
+        G->>T: webhook -> signal cancelCheckStatusDelay
+        T->>T: re-fetch refreshed order
+    and
+        Note over T: timeout (N min) -> GDC status check activity
+        T->>G: status check
+        G-->>T: status -> order PROCESSED_SUCCESS / FAILED
+    end
+    T-->>W: commit / release hold
+    T->>N: push notification
+    T->>T: record final history (COMPLETED / FAILED / PENDING)
+    Note over T: on error -> saga compensation: order FAILED + release hold
+    T->>T: signal confirmBooking (finally)
+  </div>
+      <p class="diagram-caption">GDC bank transfer — the webhook signals the waiting workflow to unblock, avoiding the timeout wait.</p>
+      <p>GDC settles via a webhook that unblocks the waiting workflow (avoids timeout wait).</p>
+
+      <h3>Transfer routing (inquiry → provider)</h3>
+      <p><code>POST /api/v1/transfers/inquiry</code> → <code>TransferRoutingService.determineGateway()</code>: (1) smart rules (preferred bank-code exact match, then preferred amount threshold), (2) weighted percentage split (weights must sum to exactly 100). Forward via <code>RequestDispatcher</code> to <code>/api/v1/transfers/{partner}/inquiry</code>, then cache <code>transfer:{bookingId} → partnerName</code> in Redis (TTL 15 min). Config <code>atomepay.partners.routing.transfer</code> is <code>@RefreshScope</code> hot-reloadable from Config Server.</p>
+
+      <h2 id="qris">QRIS · Top-up · PPOB</h2>
+      <ul>
+        <li><strong>QRIS</strong> (payment-service + account-service): Artajasa QRIS payment/refund, network sign-on/sign-off/echo/cutover; QRIS payload parsing via <code>QrisParser</code> in atomepay-common. Routes under <code>/api/v1/qr</code>, <code>/api/v1/qr/artajasa</code>.</li>
+        <li><strong>Top-up</strong> (topup-service): Artajasa top-up + status inquiry (<code>POST /status-inquiry</code>); Rintis notification ingestion under <code>/api/v1/rintis/notification</code>.</li>
+        <li><strong>PPOB</strong> (ppob-service): biller inquiry + payment via Doku; routes under <code>/api/v1/biller/doku</code>, orders under <code>/api/v1/biller</code>.</li>
+      </ul>
+
+      <h2 id="kyc">e-KYC</h2>
+      <p><code>ekyc-service</code> exposes <code>/api/v1/kyc</code> (request, consent, KTP-image, liveness-check, personal-data, workflows), <code>/api/v1/backoffice/kyc</code> and <code>/api/v1/internal/kyc</code>. Workflow: request → consent → KTP image → OCR → liveness → fraud assessment. Encryption: AES-GCM with Aliyun KMS.</p>
+
+      <h2 id="endpoints">REST endpoint inventory (consolidated)</h2>
+      <p>Extracted from <code>src/main</code> of each cloned service. Method mappings are relative to the listed <code>@RequestMapping</code> context path. Use this to locate the controller, then read the source for details.</p>
+
+      <h3>account-service</h3>
+      <pre><code>GET  /account/{appUserId}/details · /account/{accountNumber}/wallet-transaction · /account/status
+POST /account/status/freeze · /account/status/unfreeze · /inquiry · auth
+GET  /wallets · /wallets/{appUserId}/balance · /banks
+@RequestMapping: /api/v1/artajasa · /api/v1/backoffice · /api/v1/biller(/doku) ·
+                 /api/v1/cashout(/doku) · /api/v1/qr(/artajasa) · /api/v1/internal ·
+                 /api/v1/rintis · /api/v1/transfers(/atome,/doku,/gdc)</code></pre>
+
+      <h3>app-user-service</h3>
+      <pre><code>POST /start · /transaction · /challenge · /verification · /resend · /refresh · /logout
+     /reset · /enroll · /evict/kyc-status · /forgot/(otp|otp-verification)-(email|whatsapp)
+     /forgot/resend-otp-(email|whatsapp) · /otp/resend · /otp/verification
+     /user/email-updates/otp(+resend) · /email-otps/(send|resend|verification)
+GET  /users · /users/{userId} · /status · /deletion-requests · /referral-code
+     /banned-phone(+csv-template) · /audit/pin · /audit/biometric · /suspicious/pin-activity
+PATCH /name · /user/email · DELETE /avatar · /banned-phone/{phoneNumber}</code></pre>
+
+      <h3>blacklist-service</h3>
+      <pre><code>GET  /blacklist-individual · /blacklist-individual/csv-template
+POST /blacklist-individual · /check · /status · DELETE /blacklist-individual/{id}
+/api/v1/backoffice · /api/v1/internal/blacklist</code></pre>
+
+      <h3>ekyc-service</h3>
+      <pre><code>GET  /workflows · /workflows/{id} · /request · /request/status · /status · /detail
+     /personal-information · /app-user/{appUserId}/summary
+POST /request · /request/consent · /request/ktp-image · /request/liveness-check
+     /workflows/app-user/{appUserId}/re-initiate · PUT /request/personal-data
+/api/v1/kyc · /api/v1/backoffice/kyc · /api/v1/internal/kyc</code></pre>
+
+      <h3>transfer-service</h3>
+      <pre><code>GET  /order · /order/export · /order/summary · /order/{id} · /{referenceNumber}
+     /status-inquiry · /atome/order(+export/summary/{id}) · /doku/order(...) · /gdc/order(...)
+POST /confirm · /notification · /refund · /unpaid
+/api/v1/transfers · /api/v1/transfers/atome · /api/v1/transfers/doku(/notifications)
+/api/v1/transfers/gdc · /api/v1/cashout(/doku) · /api/v1/internal/gdc</code></pre>
+
+      <h3>payment-service</h3>
+      <pre><code>GET  /{referenceNumber} · /artajasa/order(+export/summary) · /artajasa/order/{id}
+POST /payment · /refund · /signon · /signoff · /echo · /cutover · /send-signon · /send-signoff · /send-echo
+/api/v1/qr · /api/v1/qr/artajasa(/network) · /api/v1/backoffice/qris</code></pre>
+
+      <h3>ppob-service</h3>
+      <pre><code>GET /{referenceNumber} · /doku/order(+export/summary) · /doku/order/{id}
+POST /payment · /api/v1/biller · /api/v1/biller/doku</code></pre>
+
+      <h3>topup-service</h3>
+      <pre><code>GET /order · /order/export · /order/summary · /order/{id}
+POST /status-inquiry · /api/v1/artajasa · /api/v1/internal/artajasa · /api/v1/rintis/notification</code></pre>
+
+      <h3>transaction-history-service</h3>
+      <pre><code>GET  /available-periods · /biller/{billerName} · /quick-transfers · /recent · /suspicious
+     /suspicious/export · /suspicious/user-activity · /suspicious/{id}/transactions
+     /{referenceNumber} · /{id}/favorite
+POST /generate · PUT /{id}/favorite · DELETE /{id}/favorite
+/api/v1/transactions(/e-statement) · /api/v1/contacts · /api/v1/backoffice/transactions</code></pre>
+
+      <h3>notification-service · home-service</h3>
+      <pre><code>notification: GET /notification(/status,/topic) · POST /notification/mark-all-read
+               /notification/topic/subscribe · /topic/unsubscribe · /channel/fcm/register
+               PUT /notification/{id}/read · /api/v1
+home:         GET /home · /reminders · /api/v1/</code></pre>
+
+      <h2 id="repos">Repository index</h2>
+      <table>
+        <tr><th>Repo</th><th>Stack</th><th>Role</th></tr>
+        <tr><td>account-service</td><td><span>Kotlin</span></td><td>Wallet core (8081*)</td></tr>
+        <tr><td>app-user-service</td><td><span>Kotlin</span></td><td>User lifecycle</td></tr>
+        <tr><td>transfer-service</td><td><span>Kotlin</span></td><td>Transfers atome/doku/gdc (8890)</td></tr>
+        <tr><td>topup-service</td><td><span>Kotlin</span></td><td>Top-up (8889)</td></tr>
+        <tr><td>payment-service</td><td><span>Kotlin</span></td><td>QRIS (8091)</td></tr>
+        <tr><td>ppob-service</td><td><span>Kotlin</span></td><td>PPOB billers (8012)</td></tr>
+        <tr><td>ekyc-service</td><td><span>Kotlin</span></td><td>e-KYC (8082*)</td></tr>
+        <tr><td>blacklist-service</td><td><span>Kotlin</span></td><td>Blacklist (8084)</td></tr>
+        <tr><td>notification-service</td><td><span>Kotlin</span></td><td>Push/email</td></tr>
+        <tr><td>transaction-history-service</td><td><span>Kotlin</span></td><td>History/statements (8085)</td></tr>
+        <tr><td>home-service</td><td><span>Kotlin</span></td><td>Home content (8087)</td></tr>
+        <tr><td>config-service</td><td><span>Kotlin</span></td><td>Config server</td></tr>
+        <tr><td>atomepay-common</td><td><span class="tag maven">maven</span></td><td>Shared lib (submodule)</td></tr>
+        <tr><td>atome_pay_mobile</td><td><span class="tag other">flutter</span></td><td>Consumer mobile app</td></tr>
+        <tr><td>back-office</td><td><span class="tag node">node</span></td><td>Internal back-office admin web app</td></tr>
+        <tr><td>public-website</td><td><span class="tag node">node</span></td><td>Public marketing website</td></tr>
+        <tr><td>pubweb</td><td><span class="tag other">other</span></td><td>AtomePay public web</td></tr>
+        <tr><td>cms-public-website</td><td><span class="tag node">node</span></td><td>CMS for public website</td></tr>
+        <tr><td>notification-web</td><td><span class="tag other">shell</span></td><td>Notification web helper</td></tr>
+        <tr><td>qe-api-automation</td><td><span class="tag py">python</span></td><td>API-level automated tests</td></tr>
+        <tr><td>qe-automation-mobile</td><td><span class="tag other">robot</span></td><td>Mobile UI automation</td></tr>
+        <tr><td>qe-ios-automation</td><td><span class="tag other">robot</span></td><td>iOS automation</td></tr>
+        <tr><td>qe-performance-test</td><td><span class="tag py">python</span></td><td>Performance/load tests</td></tr>
+        <tr><td>apb-infra</td><td><span class="tag other">tf</span></td><td>IaC, <code>alicloud/</code></td></tr>
+        <tr><td>apb-services-kube-manifest</td><td><span class="tag other">k8s</span></td><td>K8s manifests for APB services, <code>staging/</code></td></tr>
+        <tr><td>apb-cluster-kube-manifest</td><td><span class="tag other">k8s</span></td><td>K8s manifests for the cluster</td></tr>
+        <tr><td>api-gateway</td><td><span class="tag other">—</span></td><td>API gateway</td></tr>
+        <tr><td>jenkins-shared-library</td><td><span class="tag other">groovy</span></td><td>Shared Jenkins pipeline library</td></tr>
+        <tr><td>image-collections</td><td><span class="tag other">docker</span></td><td>Docker base images</td></tr>
+        <tr><td>ktp-generator</td><td><span class="tag py">python</span></td><td>KTP test-data generator</td></tr>
+      </table>
+
+      <h2 id="localdev">Local development</h2>
+      <pre><code># Build one service (also builds shared/atomepay-common)
+cd /opt/atomepay/&lt;service&gt; &amp;&amp; ./mvnw clean install
+
+# List endpoints in a service
+grep -rhoE '@(Get|Post|Put|Patch|Delete|Request)Mapping\("([^"]+)"\)' src/main | sort -u
+
+# Read transfer flow diagrams (richest docs in the org)
+cat transfer-service/docs/{general,atome,doku,gdc}-transfer-flow.md
+
+# git safety for cloned repos (dubious ownership)
+git -c safe.directory=/opt/atomepay/&lt;repo&gt; log --oneline -1</code></pre>
+
+      <div class="callout danger">
+        <div class="label">Staging DB access</div>
+        Use <code>atomecli saturn mysql/redis/mongo/es</code> for staging lookups only
+        (<code>s6_*</code> = ID AFI, <code>s5_my</code> = MY). Always confirm before writes.
+      </div>
+
+      <div class="pager">
+        <a href="#overview"><small>← Previous</small>Overview</a>
+        <a href="#endpoints" style="text-align: right;"><small>Next →</small>REST endpoints</a>
+      </div>
+    </article>
+    <aside class="toc">
+      <div class="toc-label">On this page</div>
+      <a href="#overview">What is AtomePay</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#techstack">Tech stack</a>
+      <a href="#services">Service map</a>
+      <a href="#shared">atomepay-common</a>
+      <a href="#security">Security model</a>
+      <a href="#transfers">Transfer flows</a>
+      <a href="#qris">QRIS · Top-up · PPOB</a>
+      <a href="#kyc">e-KYC</a>
+      <a href="#endpoints">REST endpoints</a>
+      <a href="#repos">Repository index</a>
+      <a href="#localdev">Local development</a>
+    </aside>
+  </div>
+  <script src="mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({ startOnLoad: true, theme: 'base', themeVariables: { primaryColor: '#edf7f3', primaryTextColor: '#1c1b1a', primaryBorderColor: '#0ca678', lineColor: '#0ca678', fontFamily: '-apple-system, system-ui, sans-serif' }, securityLevel: 'loose' });
+  </script>
+</body>
+</html>
