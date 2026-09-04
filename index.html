@@ -82,6 +82,7 @@
     .zoombar button { width: 28px; height: 28px; border: 1px solid var(--border); background: var(--surface); border-radius: 7px; color: var(--fg); font-size: 15px; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
     .zoombar button:hover { border-color: var(--accent); color: var(--accent); }
   </style>
+  <link rel="stylesheet" href="highlight-vs2015.min.css" />
 </head>
 <body>
   <header class="topbar">
@@ -106,6 +107,7 @@
         <div class="group-label">Flows</div>
         <a href="#transfers">Transfers (Atome/Doku/GDC)</a>
         <a href="#qris">QRIS · Top-up · PPOB</a>
+        <a href="#schema">Database schema</a>
         <a href="#registration">Registration</a>
         <a href="#kyc">e-KYC</a>
       </div>
@@ -117,6 +119,11 @@
         <a href="#partner-artajasa">Artajasa</a>
         <a href="#partner-rintis">Rintis</a>
         <a href="#partner-code">Key code</a>
+      </div>
+      <div class="group">
+        <div class="group-label">Platform</div>
+        <a href="#async">Async messaging</a>
+        <a href="#cicd">CI / CD</a>
       </div>
       <div class="group">
         <div class="group-label">Reference</div>
@@ -340,6 +347,41 @@ sequenceDiagram
       <p class="diagram-caption">GDC bank transfer — the webhook signals the waiting workflow to unblock, avoiding the timeout wait.</p>
       <p>GDC settles via a webhook that unblocks the waiting workflow (avoids timeout wait).</p>
 
+
+      <h3>Cashout (Doku) — token + signal workflow</h3>
+      <div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant App as Mobile App
+    participant A as account-service
+    participant T as transfer-service
+    participant W as DokuCashoutWorkflow
+    participant N as DokuCashoutNotificationWorkflow
+    participant D as Doku
+    App->>A: POST /api/v1/cashout/inquiry
+    A-->>App: inquiry reference (store limit check 50k–1M)
+    App->>T: POST /api/v1/cashout/doku/confirm
+    T->>W: start DokuCashoutWorkflow (confirmCashout)
+    W->>T: Saga.addCompensation (fail → release hold + FAILED history)
+    W->>T: BankTransferDebitWorkflow.holdWalletBalanceForTransfer
+    W->>D: requestToken(booking) (custKey)
+    D-->>W: token response (status=0 + custKey) or error
+    W->>W: create DokuCashoutTransactionOrder (RECEIVED)
+    W->>T: sendCashoutHistory PENDING
+    W->>N: spawn DokuCashoutNotificationWorkflow
+    N->>N: Workflow.await(10 min token validity)
+    alt Doku callback first
+        D->>T: POST /api/v1/cashout/doku/notification (PAID/EXPIRED/REFUND)
+        T->>N: signal notificationReceived(order)
+        N->>N: processPaid/Expired/RefundNotification
+        N->>T: confirm bank transfer (commit/release hold) + history
+    else timeout (no callback)
+        N->>D: checkStatus(partnerTransactionId)
+        N->>N: treat no-status/API-fail as EXPIRED (conservative)
+    end
+    Note over W: error path → cashoutSaga.compensate() → release hold + PROCESSED_FAILED
+      </div>
+      <p class="diagram-caption">Doku cashout — wallet HOLD via BankTransferDebitWorkflow, Doku token (custKey), async PAID/EXPIRED/REFUND callback signal vs 10-min timeout status check; saga compensation on failure. Store config: Indomaret I01, 50k–1M IDR, step 50k.</p>
       <h3>Transfer routing (inquiry → provider)</h3>
       <p><code>POST /api/v1/transfers/inquiry</code> → <code>TransferRoutingService.determineGateway()</code>: (1) smart rules (preferred bank-code exact match, then preferred amount threshold), (2) weighted percentage split (weights must sum to exactly 100). Forward via <code>RequestDispatcher</code> to <code>/api/v1/transfers/{partner}/inquiry</code>, then cache <code>transfer:{bookingId} → partnerName</code> in Redis (TTL 15 min). Config <code>atomepay.partners.routing.transfer</code> is <code>@RefreshScope</code> hot-reloadable from Config Server.</p>
 
@@ -468,6 +510,45 @@ sequenceDiagram
   </div>
       <p class="diagram-caption">PPOB biller payment via Doku — biller inquiry from account-service, then wallet hold + Doku payment + polling/finalization in ppob-service.</p>
 
+      <h2 id="schema">Database schema overview</h2>
+      <p>Each service owns its PostgreSQL schema via Flyway migrations (<code>migrations/V1__init.sql</code>). The wallet platform's money movement centres on <strong>booking → order → hold → wallet_transaction</strong>.</p>
+      <div class="table-wrap">
+      <table class="eptable">
+        <tr><th style="width:200px">Service</th><th>Core tables</th></tr>
+        <tr><td><strong>account-service</strong></td><td class="mono">customer_information · wallets · wallet_transactions · wallet_holds · customer_logins · cif_monthly_sequences · artajasa_inquiry_reference_log</td></tr>
+        <tr><td><strong>app-user-service</strong></td><td class="mono">app_user · user_pin · user_device · user_biometric_credentials · otp_challenge · otp_send_log · banned_phone · user_deletion_requests · start_flow_audit_log · app_user_audit_log</td></tr>
+        <tr><td><strong>transfer-service</strong></td><td class="mono">banks · atome_transaction_booking · atome_transaction_orders · gdc_transaction_booking · gdc_transaction_orders · gdc_notification_audit_log · doku_* (booking/order/audit) · doku_cashout_*</td></tr>
+        <tr><td><strong>topup-service</strong></td><td class="mono">artajasa_transaction_booking · artajasa_transaction_orders · artajasa_notification_audit_log · rintis_transaction_booking · rintis_transaction_orders · banks · iso_currencies</td></tr>
+        <tr><td><strong>payment-service</strong></td><td class="mono">artajasa_qris_payment_booking · artajasa_qris_payment_orders · artajasa_qris_refund_orders</td></tr>
+        <tr><td><strong>ppob-service</strong></td><td class="mono">doku transaction booking/order + audit logs (DokuTransactionBooking / DokuTransactionOrder models)</td></tr>
+        <tr><td><strong>ekyc-service</strong></td><td class="mono">kyc_workflows · ktp_ocr_data · liveness_checks · blacklist_checks · fraud_assessments · *_audit_log</td></tr>
+        <tr><td><strong>blacklist-service</strong></td><td class="mono">blacklisted_individuals</td></tr>
+        <tr><td><strong>transaction-history-service</strong></td><td class="mono">transaction · topup_history · cashout_history · bank_transfer_history · transfer_history · ppob_payment_history · qris_payment_history · e_statement_record · contact · suspicious_transaction</td></tr>
+        <tr><td><strong>notification-service</strong></td><td class="mono">notification · notification_log · notification_template · user_channel · email_notification</td></tr>
+      </table>
+      </div>
+
+      <h3>Money-movement entity pattern</h3>
+      <div class="mermaid">
+graph LR
+    subgraph Booking
+        BK[booking<br/>id · accountNumber · amount · currency<br/>bookingDatetime · status]
+    end
+    subgraph Order
+        OR[order<br/>bookingId · partnerTransactionId<br/>referenceNumber · amount · totalFee<br/>processStatus RECEIVED]
+    end
+    subgraph Hold
+        HD[wallet_holds<br/>walletId · amount · status HOLD]
+    end
+    subgraph Ledger
+        WT[wallet_transactions<br/>partnerTransactionId · type CREDIT/DEBIT<br/>balanceBefore · balanceAfter]
+    end
+    BK -->|confirmed| OR
+    OR -->|debit/release| HD
+    OR -->|commit| WT
+    WT -->|updates balance| W[(wallets)]
+      </div>
+      <p class="diagram-caption">Booking/order pattern: inquiry creates a booking; confirmed payments create an order (RECEIVED); transfer flows hold the wallet then commit to a wallet_transaction; the partner callback or status check finalizes it.</p>
       <h2 id="registration">Registration flow</h2>
       <div class="mermaid">
 sequenceDiagram
@@ -740,7 +821,7 @@ sequenceDiagram
       <div class="code-block">
         <div class="code-cap">1 · Idempotent wallet credit — <code>account-service</code> <code>TopupWalletServiceImpl.kt</code></div>
         <div class="code-note">The single place every top-up (Artajasa/Rintis) money-in lands. Idempotency key = <code>partnerTransactionId</code>; all limits are checked before the balance mutation; tx row is written before the balance so a crash never credits twice.</div>
-        <pre><code>override fun creditTopupWallet(
+        <pre><code class="language-kotlin">override fun creditTopupWallet(
     accountNumber: String,
     amount: BigDecimal,
     partnerTransactionId: String,
@@ -790,7 +871,7 @@ sequenceDiagram
       <div class="code-block">
         <div class="code-cap">2 · Artajasa inbound auth + ACK — <code>topup-service</code> <code>ArtajasaService.kt</code></div>
         <div class="code-note">Artajasa uses a static shared-secret match (username + signature hash) instead of HMAC/HTTPS-mTLS. The response body carries a partner status-code ACK (<code>SUCCESS / ALREADY_PAID / ILLEGAL_SIGNATURE / …</code>) — the workflow runs synchronously within a 30s client timeout.</div>
-        <pre><code>// Inbound partner callbacks are authenticated by matching the
+        <pre><code class="language-kotlin">// Inbound partner callbacks are authenticated by matching the
 // configured username + signature-hash (shared secret), not an OAuth flow.
 private fun isSignatureValid(request: ArtajasaNotificationRequest): Boolean {
     return request.username == artajasaConfig.username
@@ -818,7 +899,7 @@ override fun handlePaymentNotification(request: ArtajasaNotificationRequest): Ar
       <div class="code-block">
         <div class="code-cap">3 · Doku outbound HMAC-SHA512 — <code>transfer-service</code> <code>DokuTransferSignatureServiceImpl.kt</code></div>
         <div class="code-note">Doku signatures are <b>HMAC-SHA512(clientSecret)</b> over a canonical string <code>METHOD:URL:TOKEN:SHA256(minifiedBody):ISO_TIMESTAMP</code>. The minified body must be the exact canonical JSON (Jackson <code>readTree</code>) or the hash won't match on Doku's side.</div>
-        <pre><code>// Outbound Doku request signature: HMAC-SHA512 over
+        <pre><code class="language-kotlin">// Outbound Doku request signature: HMAC-SHA512 over
 // "HTTP_METHOD:endpointUrl:accessToken:sha256(minifiedBody):timestamp"
 // using the *client secret* as the HMAC key.
 override fun &lt;T&gt; createFromPayload(
@@ -846,7 +927,7 @@ override fun createSignature(byteArrayToSign: ByteArray): String {
       <div class="code-block">
         <div class="code-cap">4 · Doku webhook verification — <code>transfer-service</code> <code>DokuNotificationService.kt</code></div>
         <div class="code-note">Inbound Doku webhooks (unpaid / refund) are verified with a symmetric <b>AES(encryptionKey)</b> over <code>agentKey + requestId</code> — a different scheme from the outbound HMAC. Both live in <code>DokuPayoutServiceProperties</code>.</div>
-        <pre><code>// Inbound Doku webhook (unpaid / refund): re-compute AES(agentKey + requestId)
+        <pre><code class="language-kotlin">// Inbound Doku webhook (unpaid / refund): re-compute AES(agentKey + requestId)
 // with the configured encryption key and compare.
 override fun verifySignature(agentKey: String, requestId: String, signature: String): Boolean {
     if (agentKey != properties.agentKey)
@@ -868,7 +949,7 @@ private fun encrypt(plainString: String, encryptionKey: String): String {
       <div class="code-block">
         <div class="code-cap">5 · Cross-service child workflow + signal — <code>topup-service</code> / <code>account-service</code></div>
         <div class="code-note">Rintis/Artajasa notification workflows credit the wallet by starting a <b>child workflow on the account-service task queue</b> (workflow-level reliability across services). Booking record-booking uses {@literal @}SignalMethod <code>confirmBooking()</code> so a lasting workflow can be settled when the payment notification arrives later.</div>
-        <pre><code>// Top-up notification (Rintis shown; Artajasa is identical) → wallet credit
+        <pre><code class="language-kotlin">// Top-up notification (Rintis shown; Artajasa is identical) → wallet credit
 // happens on ANOTHER service via a child workflow on its task queue.
 private fun startCreditTopupWalletWorkflow(order: RintisTransactionOrder) {
     val stub = Workflow.newChildWorkflowStub(
@@ -896,6 +977,63 @@ interface ArtajasaRecordBookingWorkflow {
     fun confirmBooking()
 }</code></pre>
       </div>
+      <h2 id="async">Async messaging (Kafka)</h2>
+      <p>Services never call the notification service directly — they publish events to Kafka and notification-service consumes them. Two topics exist; both are fire-and-forget with Redis-based dedup for fraud alerts.</p>
+      <div class="table-wrap">
+      <table class="eptable">
+        <tr><th style="width:180px">Topic</th><th style="width:200px">Producers</th><th style="width:200px">Consumer</th><th>Payload / purpose</th></tr>
+        <tr><td class="mono">notification-events</td><td>app-user, ekyc, payment, ppob, topup, transfer, transaction-history</td><td><code>NotificationConsumer</code> (notification-service)</td><td><code>NotificationEvent</code>: requestId, type, subType, success, channel (FCM default / EMAIL), appUserId, data map → FCM push or email</td></tr>
+        <tr><td class="mono">fraud-alert-events</td><td>transaction-history (<code>FraudAlertProducer</code>)</td><td><code>FraudAlertConsumer</code> (notification-service)</td><td>Suspicious-transaction alerts; Redis dedup key <code>fraud-alert:dedup:{sortedTxIds}</code> TTL 5 min → fraud alert email</td></tr>
+      </table>
+      </div>
+
+      <h3>Notification pipeline</h3>
+      <div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant S as Any service (producer)
+    participant K as Kafka topic
+    participant C as NotificationConsumer
+    participant N as notification-service
+    participant P as FCM / SMTP
+    S->>S: NotificationProducer.sendMessage(key, event)
+    S->>K: send(notification-events, key, JSON)
+    K->>C: @KafkaListener(topic="notification-events")
+    C->>C: readValue → NotificationEvent
+    alt channel == FCM
+        C->>N: sendPushNotification(event)
+        N->>P: FCM push
+    else channel == EMAIL
+        C->>N: sendEmailNotification(event)
+        N->>P: SMTP email
+    else
+        N->>N: log unhandled channel
+    end
+      </div>
+      <p class="diagram-caption">notification-events pipeline — producers in 7 services, single consumer, channel-routed to FCM or email.</p>
+
+      <h3>Fraud-alert pipeline</h3>
+      <div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant TH as transaction-history-service
+    participant K as Kafka topic
+    participant F as FraudAlertConsumer
+    participant R as Redis
+    participant E as fraudAlertEmailService
+    TH->>TH: detect suspicious transaction(s)
+    TH->>K: send(fraud-alert-events, requestId, transactions[])
+    K->>F: @KafkaListener(topic="fraud-alert-events")
+    F->>F: readValue → FraudAlertEvent
+    F->>R: SET NX fraud-alert:dedup:{sortedTxIds} TTL 5min
+    alt key already exists
+        F->>F: skip duplicate (logged)
+    else new key
+        F->>E: sendFraudAlertEmail(event)
+    end
+      </div>
+      <p class="diagram-caption">fraud-alert-events — Redis SET-NX dedup prevents duplicate emails for the same transaction set.</p>
+
       <h2 id="endpoints">REST endpoint inventory (consolidated)</h2>
       <p>Extracted from <code>src/main</code> of each cloned service. Method mappings are relative to the listed <code>@RequestMapping</code> context path. Use this to locate the controller, then read the source for details.</p>
 
@@ -1127,6 +1265,125 @@ interface ArtajasaRecordBookingWorkflow {
       </table>
       </div>
 
+      <h3>config-service</h3>
+      <div class="table-wrap">
+<table class="eptable">
+        <tr><th style="width:70px">Method</th><th>Path</th></tr>
+      <tr><td>GET</td><td class="mono">/api/v1/backoffice/property</td></tr>
+      <tr><td>POST</td><td class="mono">/api/v1/backoffice/property</td></tr>
+      <tr><td>PUT</td><td class="mono">/api/v1/backoffice/property/{id}</td></tr>
+      <tr><td>DELETE</td><td class="mono">/api/v1/backoffice/property/{id}</td></tr>
+      <tr class="ctx"><td colspan="2"><span class="ctx-label">@RequestMapping</span> <code>/api/v1/backoffice</code> (dynamic properties, <code>@RefreshScope</code> hot-reload)</td></tr>
+      </table>
+      </div>
+
+      <h3>backoffice (all services)</h3>
+      <p>Admin endpoints under <code>/api/v1/backoffice</code> (protected by the back-office API filter), grouped by owning service.</p>
+      <div class="table-wrap">
+<table class="eptable">
+        <tr><th style="width:70px">Method</th><th>Path</th></tr>
+      <tr class="ctx"><td colspan="2"><span class="ctx-label">■ account-service</span> <code>/api/v1/backoffice</code></td></tr>
+      <tr><td>GET</td><td class="mono">/account/{appUserId}/details</td></tr>
+      <tr><td>GET</td><td class="mono">/account/{accountNumber}/wallet-transaction</td></tr>
+      <tr><td>GET</td><td class="mono">/account/status</td></tr>
+      <tr><td>POST</td><td class="mono">/account/status/freeze</td></tr>
+      <tr><td>POST</td><td class="mono">/account/status/unfreeze</td></tr>
+      <tr class="ctx"><td colspan="2"><span class="ctx-label">■ app-user-service</span> <code>/api/v1/backoffice</code></td></tr>
+      <tr><td>GET</td><td class="mono">/users</td></tr>
+      <tr><td>GET</td><td class="mono">/users/{userId}</td></tr>
+      <tr><td>GET</td><td class="mono">/banned-phone</td></tr>
+      <tr><td>DELETE</td><td class="mono">/banned-phone/{phoneNumber}</td></tr>
+      <tr><td>POST</td><td class="mono">/banned-phone/import (multipart CSV)</td></tr>
+      <tr><td>GET</td><td class="mono">/banned-phone/csv-template</td></tr>
+      <tr><td>GET</td><td class="mono">/deletion-requests</td></tr>
+      <tr><td>GET</td><td class="mono">/audit/pin</td></tr>
+      <tr><td>GET</td><td class="mono">/suspicious/pin-activity</td></tr>
+      <tr><td>GET</td><td class="mono">/audit/biometric</td></tr>
+      <tr class="ctx"><td colspan="2"><span class="ctx-label">■ blacklist-service</span> <code>/api/v1/backoffice</code></td></tr>
+      <tr><td>GET</td><td class="mono">/blacklist-individual</td></tr>
+      <tr><td>POST</td><td class="mono">/blacklist-individual</td></tr>
+      <tr><td>DELETE</td><td class="mono">/blacklist-individual/{id}</td></tr>
+      <tr><td>POST</td><td class="mono">/blacklist-individual/import (multipart CSV)</td></tr>
+      <tr><td>GET</td><td class="mono">/blacklist-individual/csv-template</td></tr>
+      <tr class="ctx"><td colspan="2"><span class="ctx-label">■ ekyc-service</span> <code>/api/v1/backoffice/kyc</code></td></tr>
+      <tr><td>GET</td><td class="mono">/workflows</td></tr>
+      <tr><td>GET</td><td class="mono">/workflows/{id}</td></tr>
+      <tr><td>POST</td><td class="mono">/workflows/app-user/{appUserId}/re-initiate</td></tr>
+      <tr><td>GET</td><td class="mono">/app-user/{appUserId}/summary</td></tr>
+      <tr class="ctx"><td colspan="2"><span class="ctx-label">■ payment-service</span> <code>/api/v1/backoffice/qris</code></td></tr>
+      <tr><td>GET</td><td class="mono">/artajasa/order</td></tr>
+      <tr><td>GET</td><td class="mono">/artajasa/order/{id}</td></tr>
+      <tr><td>GET</td><td class="mono">/artajasa/order/summary</td></tr>
+      <tr><td>GET</td><td class="mono">/artajasa/order/export</td></tr>
+      <tr class="ctx"><td colspan="2"><span class="ctx-label">■ ppob-service</span> <code>/api/v1/backoffice</code></td></tr>
+      <tr><td>GET</td><td class="mono">/doku/order</td></tr>
+      <tr><td>GET</td><td class="mono">/doku/order/{id}</td></tr>
+      <tr><td>GET</td><td class="mono">/doku/order/summary</td></tr>
+      <tr><td>GET</td><td class="mono">/doku/order/export</td></tr>
+      <tr class="ctx"><td colspan="2"><span class="ctx-label">■ topup-service</span> <code>/api/v1/backoffice/artajasa</code> · <code>/api/v1/backoffice/rintis</code></td></tr>
+      <tr><td>GET</td><td class="mono">/artajasa/order</td></tr>
+      <tr><td>GET</td><td class="mono">/artajasa/order/{id}</td></tr>
+      <tr><td>GET</td><td class="mono">/artajasa/order/summary</td></tr>
+      <tr><td>GET</td><td class="mono">/artajasa/order/export</td></tr>
+      <tr><td>POST</td><td class="mono">/artajasa/status-inquiry</td></tr>
+      <tr><td>GET</td><td class="mono">/rintis/order</td></tr>
+      <tr><td>GET</td><td class="mono">/rintis/order/summary</td></tr>
+      <tr><td>GET</td><td class="mono">/rintis/order/export</td></tr>
+      <tr class="ctx"><td colspan="2"><span class="ctx-label">■ transfer-service</span> <code>/api/v1/backoffice</code> · <code>/api/v1/backoffice/doku-cashout</code></td></tr>
+      <tr><td>GET</td><td class="mono">/gdc/order</td></tr>
+      <tr><td>GET</td><td class="mono">/gdc/order/{id}</td></tr>
+      <tr><td>GET</td><td class="mono">/gdc/order/summary</td></tr>
+      <tr><td>GET</td><td class="mono">/gdc/order/export</td></tr>
+      <tr><td>GET</td><td class="mono">/atome/order</td></tr>
+      <tr><td>GET</td><td class="mono">/atome/order/{id}</td></tr>
+      <tr><td>GET</td><td class="mono">/atome/order/summary</td></tr>
+      <tr><td>GET</td><td class="mono">/atome/order/export</td></tr>
+      <tr><td>GET</td><td class="mono">/doku/order</td></tr>
+      <tr><td>GET</td><td class="mono">/doku/order/{id}</td></tr>
+      <tr><td>GET</td><td class="mono">/doku/order/summary</td></tr>
+      <tr><td>GET</td><td class="mono">/doku/order/export</td></tr>
+      <tr class="ctx"><td colspan="2"><span class="ctx-label">■ doku-cashout</span> <code>/api/v1/backoffice/doku-cashout</code></td></tr>
+      <tr><td>GET</td><td class="mono">/order</td></tr>
+      <tr><td>GET</td><td class="mono">/order/{id}</td></tr>
+      <tr><td>GET</td><td class="mono">/order/summary</td></tr>
+      <tr><td>GET</td><td class="mono">/order/export</td></tr>
+      <tr class="ctx"><td colspan="2"><span class="ctx-label">■ transaction-history-service</span> <code>/api/v1/backoffice/transactions</code></td></tr>
+      <tr><td>GET</td><td class="mono">/suspicious</td></tr>
+      <tr><td>GET</td><td class="mono">/suspicious/{id}/transactions</td></tr>
+      <tr><td>GET</td><td class="mono">/suspicious/user-activity</td></tr>
+      <tr><td>GET</td><td class="mono">/suspicious/export</td></tr>
+      </table>
+      </div>
+
+      <h2 id="cicd">CI / CD &amp; infrastructure</h2>
+      <h3>CI — GitLab CI (per service)</h3>
+      <p>Each backend service ships a <code>.gitlab-ci.yml</code>. Docker images are built and pushed to the internal Harbor registry (<code>harbor.aaflamingo.net</code>, repo <code>apb</code>); Kubernetes tags pick up the image and apply it.</p>
+      <div class="table-wrap">
+      <table class="eptable">
+        <tr><th style="width:200px">Area</th><th>Detail</th></tr>
+        <tr><td><strong>Build</strong></td><td><code>docker:20.10.22-cli</code> + DinD; stage <code>build</code> on <code>main</code>/<code>develop</code>/<code>feature/*</code>; image tag <code>${CI_PIPELINE_ID}.${CI_COMMIT_SHORT_SHA}-&lt;ref&gt;</code></td></tr>
+        <tr><td><strong>Registry</strong></td><td class="mono">harbor.aaflamingo.net (apb repo) — Docker base images also in <code>image-collections</code></td></tr>
+        <tr><td><strong>Runtime port (local)</strong></td><td class="mono">account 8081* · transfer 8890 · topup 8889 · others per service</td></tr>
+        <tr><td><strong>QE automation</strong></td><td>Jenkins pipeline (daily 06:00 Asia/Jakarta, branch trigger <code>feat/jenkinsfile</code>); Allure report image with timestamp tag → updates k8s deployment with new report image; smoke/regression/parallel profiles via docker-compose</td></tr>
+        <tr><td><strong>Shared CI</strong></td><td><code>jenkins-shared-library</code> for Jenkins pipelines; pre-commit (detect-secrets, black/isort/autoflake, flake8, mypy, bandit) for QE repos</td></tr>
+      </table>
+      </div>
+
+      <h3>Deployment — Kubernetes (staging)</h3>
+      <div class="table-wrap">
+      <table class="eptable">
+        <tr><th style="width:200px">Area</th><th>Detail</th></tr>
+        <tr><td><strong>Manifest repos</strong></td><td><code>apb-services-kube-manifest</code> (workloads), <code>apb-cluster-kube-manifest</code> (cluster), <code>apb-infra</code> (Terraform: Alicloud staging — VPC, RDS, OSS, load balancers, security groups)</td></tr>
+        <tr><td><strong>Namespace</strong></td><td class="mono">apb-app</td></tr>
+        <tr><td><strong>Sample workload</strong></td><td><code>staging/workload/apb-user-service/</code>: <code>deployment.yml</code> (replicas 1, image <code>concrete-agenda.atomepay.net/apb-services/app-user-service:&lt;tag&gt;</code>), <code>configmap.yml</code>, <code>service.yaml</code>, <code>whitelist-staging.yaml</code></td></tr>
+        <tr><td><strong>Config</strong></td><td>Non-sensitive env via <code>ConfigMap</code> (JWT_ISSUER, OSS_ENDPOINT, PIN policy, Postgres DB), secrets via k8s <code>Secret</code>s</td></tr>
+      </table>
+      </div>
+      <div class="callout">
+        <div class="label">Deploy shape</div>
+        <code>service repo → GitLab CI build → Harbor image → k8s manifest repo (deployment.yml) → apply on cluster</code>. Staging only has <code>apb-user-service</code> workload checked in so far; other services follow the same pattern.
+      </div>
+
       <h2 id="repos">Repository index</h2>
       <div class="table-wrap">
 <table>
@@ -1161,6 +1418,8 @@ interface ArtajasaRecordBookingWorkflow {
         <tr><td>jenkins-shared-library</td><td><span class="tag other">groovy</span></td><td>Shared Jenkins pipeline library</td></tr>
         <tr><td>image-collections</td><td><span class="tag other">docker</span></td><td>Docker base images</td></tr>
         <tr><td>ktp-generator</td><td><span class="tag py">python</span></td><td>KTP test-data generator</td></tr>
+        <tr><td>operation-monitor</td><td><span class="tag other">kotlin</span></td><td>Ops alerting jobs: OTP/SMS/vendor health, campaign expiry, coupon/material jobs (RabbitMQ + SMTP)</td></tr>
+        <tr><td>promotion-system</td><td><span class="tag other">java</span></td><td>Promotion suite: application-api, application-boss-api, application-callback, application-internal-api (MyBatis/Hikari, RabbitMQ, Redis, Feign)</td></tr>
       </table>
       </div>
 
@@ -1436,7 +1695,10 @@ git -c safe.directory=/opt/atomepay/&lt;repo&gt; log --oneline -1</code></pre>
       <a href="#qris">QRIS · Top-up · PPOB</a>
       <a href="#registration">Registration</a>
       <a href="#kyc">e-KYC</a>
+      <a href="#schema">Database schema</a>
+      <a href="#async">Async messaging</a>
       <a href="#partners">Partner integrations</a>
+      <a href="#cicd">CI / CD</a>
       <a href="#partner-code">Key code</a>
       <a href="#endpoints">REST endpoints</a>
       <a href="#repos">Repository index</a>
@@ -1444,6 +1706,8 @@ git -c safe.directory=/opt/atomepay/&lt;repo&gt; log --oneline -1</code></pre>
       <a href="#localdev">Local development</a>
     </aside>
   </div>
+  <script src="highlight.min.js"></script>
+  <script src="languages/kotlin.min.js"></script>
   <script src="mermaid.min.js"></script>
   <script>
     mermaid.initialize({
@@ -1629,6 +1893,12 @@ git -c safe.directory=/opt/atomepay/&lt;repo&gt; log --oneline -1</code></pre>
 
     document.addEventListener('DOMContentLoaded', function () {
       initNav();
+      var hl = (window.hljs || (typeof globalThis !== 'undefined' && globalThis.hljs));
+      if (hl) {
+        document.querySelectorAll('pre code.language-kotlin').forEach(function (el) {
+          try { hl.highlightElement(el); } catch (err) {}
+        });
+      }
       mermaid.run({ querySelector: '.mermaid' })
         .then(function () {
           document.querySelectorAll('.mermaid').forEach(attachPanZoom);
